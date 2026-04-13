@@ -6,6 +6,71 @@ Rectangle {
     id: root
     color: "#F4F6FA"
 
+    function safeText(value, fallback) {
+        return value === undefined || value === null || value === "" ? fallback : String(value)
+    }
+
+    function selectedDateObject() {
+        var dateText = (typeof backend !== "undefined") ? backend.selectedDate : ""
+        var parsed = dateText ? new Date(dateText + "T00:00:00") : new Date()
+        return isNaN(parsed.getTime()) ? new Date() : parsed
+    }
+
+    function monthLabel() {
+        var explicitLabel = (typeof backend !== "undefined") ? backend.calendarMonthLabel : ""
+        return safeText(explicitLabel, Qt.formatDate(selectedDateObject(), "MMMM yyyy"))
+    }
+
+    function dayLabel() {
+        var explicitLabel = (typeof backend !== "undefined") ? backend.selectedDayLabel : ""
+        return safeText(explicitLabel, Qt.formatDate(selectedDateObject(), "dddd, d MMMM"))
+    }
+
+    function sessionsList() {
+        return (typeof backend !== "undefined" && backend.selectedDaySessions) ? backend.selectedDaySessions : []
+    }
+
+    function sessionCountLabel() {
+        var sessions = sessionsList()
+        return sessions.length + (sessions.length === 1 ? " session scheduled" : " sessions scheduled")
+    }
+
+    function sessionTime(session) {
+        return safeText(session && session.time, "Study")
+    }
+
+    function sessionTopic(session) {
+        return safeText(session && (session.topic || session.name || session.subject), "Study session")
+    }
+
+    function sessionSubject(session) {
+        return safeText(session && session.subject, "General")
+    }
+
+    function sessionDuration(session) {
+        if (session && session.duration !== undefined && session.duration !== null)
+            return session.duration + " min"
+        return safeText(session && session.durationText, "--")
+    }
+
+    function sessionColor(session) {
+        return safeText(session && (session.color || session.subjectColor), "#3B82F6")
+    }
+
+    function totalTodayText() {
+        var explicitText = (typeof backend !== "undefined") ? backend.selectedDayTotalText : ""
+        if (explicitText !== undefined && explicitText !== null && explicitText !== "")
+            return String(explicitText)
+
+        var sessions = sessionsList()
+        var total = 0
+        for (var i = 0; i < sessions.length; ++i) {
+            var duration = sessions[i] ? sessions[i].duration : 0
+            total += Number(duration || 0)
+        }
+        return total + " min"
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -39,7 +104,7 @@ Rectangle {
                     }
 
                     Text {
-                        text: backend.calendarMonthLabel
+                        text: root.monthLabel()
                         font.pixelSize: 18; font.bold: true; color: "#1A2332"
                         Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter
                     }
@@ -161,8 +226,8 @@ Rectangle {
 
                     ColumnLayout {
                         spacing: 2
-                        Text { text: backend.selectedDayLabel; font.pixelSize: 18; font.bold: true; color: "#1A2332" }
-                        Text { text: backend.selectedDaySessions.length + " sessions scheduled"; font.pixelSize: 11; color: "#94A3B8" }
+                        Text { text: root.dayLabel(); font.pixelSize: 18; font.bold: true; color: "#1A2332" }
+                        Text { text: root.sessionCountLabel(); font.pixelSize: 11; color: "#94A3B8" }
                     }
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: "#F1F5F9" }
@@ -173,24 +238,24 @@ Rectangle {
                             Layout.fillWidth: true
                             spacing: 10
 
-                            Text { text: modelData.time; font.pixelSize: 11; color: "#94A3B8"; Layout.preferredWidth: 38 }
+                            Text { text: root.sessionTime(modelData); font.pixelSize: 11; color: "#94A3B8"; Layout.preferredWidth: 38 }
 
                             Rectangle {
                                 Layout.fillWidth: true
                                 height: 52; radius: 8
-                                color: Qt.rgba(parseInt(modelData.color.slice(1,3),16)/255, parseInt(modelData.color.slice(3,5),16)/255, parseInt(modelData.color.slice(5,7),16)/255, 0.08)
+                                color: Qt.rgba(parseInt(root.sessionColor(modelData).slice(1,3),16)/255, parseInt(root.sessionColor(modelData).slice(3,5),16)/255, parseInt(root.sessionColor(modelData).slice(5,7),16)/255, 0.08)
 
-                                Rectangle { width: 3; height: 32; radius: 2; color: modelData.color; anchors { left: parent.left; verticalCenter: parent.verticalCenter } }
+                                Rectangle { width: 3; height: 32; radius: 2; color: root.sessionColor(modelData); anchors { left: parent.left; verticalCenter: parent.verticalCenter } }
 
                                 ColumnLayout {
                                     anchors { fill: parent; leftMargin: 12; rightMargin: 10 }
                                     spacing: 2
-                                    Text { text: modelData.topic; font.pixelSize: 12; font.bold: true; color: "#1A2332"; elide: Text.ElideRight; Layout.fillWidth: true }
+                                    Text { text: root.sessionTopic(modelData); font.pixelSize: 12; font.bold: true; color: "#1A2332"; elide: Text.ElideRight; Layout.fillWidth: true }
                                     RowLayout {
                                         spacing: 6
-                                        Text { text: modelData.subject; font.pixelSize: 10; color: modelData.color }
+                                        Text { text: root.sessionSubject(modelData); font.pixelSize: 10; color: root.sessionColor(modelData) }
                                         Text { text: "."; font.pixelSize: 10; color: "#CBD5E1" }
-                                        Text { text: modelData.duration; font.pixelSize: 10; color: "#94A3B8" }
+                                        Text { text: root.sessionDuration(modelData); font.pixelSize: 10; color: "#94A3B8" }
                                     }
                                 }
                             }
@@ -207,7 +272,7 @@ Rectangle {
                         RowLayout {
                             anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
                             Text { text: "Total today:"; font.pixelSize: 11; color: "#64748B"; Layout.fillWidth: true }
-                            Text { text: backend.selectedDayTotalText; font.pixelSize: 13; font.bold: true; color: "#1A2332" }
+                            Text { text: root.totalTodayText(); font.pixelSize: 13; font.bold: true; color: "#1A2332" }
                         }
                     }
                 }

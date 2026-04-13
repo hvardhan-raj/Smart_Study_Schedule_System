@@ -3,7 +3,26 @@ import QtQuick.Layouts 1.15
 import QtQuick.Controls 2.15
 
 Rectangle {
+    id: root
     color: "#F4F6FA"
+
+    function digestData() {
+        if (typeof backend !== "undefined" && backend.todayDigest)
+            return backend.todayDigest
+
+        var latest = (typeof backend !== "undefined" && backend.notifications && backend.notifications.length > 0)
+            ? backend.notifications[0]
+            : null
+        var sessions = (typeof backend !== "undefined" && backend.selectedDaySessions) ? backend.selectedDaySessions : []
+        var nextSession = sessions.length > 0 ? sessions[0] : null
+
+        return {
+            summary: latest ? (latest.body || latest.title || "") : "No new alerts right now.",
+            nextSession: nextSession
+                ? ("Next session: " + (nextSession.subject || "Study") + " for " + ((nextSession.duration !== undefined && nextSession.duration !== null) ? (nextSession.duration + " min") : "--"))
+                : "No sessions scheduled."
+        }
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -124,9 +143,9 @@ Rectangle {
                         anchors { fill: parent; margins: 16 }
                         spacing: 6
                         Text { text: "Today's Digest"; font.pixelSize: 12; font.bold: true; color: "#1D4ED8" }
-                        Text { text: backend.todayDigest.summary; font.pixelSize: 11; color: "#1E40AF" }
+                        Text { text: root.digestData().summary; font.pixelSize: 11; color: "#1E40AF" }
                         Rectangle { Layout.fillWidth: true; height: 1; color: "#BFDBFE" }
-                        Text { text: backend.todayDigest.nextSession; font.pixelSize: 11; color: "#374151" }
+                        Text { text: root.digestData().nextSession; font.pixelSize: 11; color: "#374151" }
                         AppButton { label: "View Schedule"; variant: "primary"; small: true }
                     }
                 }

@@ -7,6 +7,19 @@ Item {
     height: 60
     property string pageTitle:    "Page Title"
     property string pageSubtitle: "Subtitle"
+    function avatarInitials() {
+        var profile = (typeof backend !== "undefined" && backend.userProfile) ? backend.userProfile : {}
+        if (profile.initials)
+            return profile.initials
+
+        var source = profile.name || profile.display_name || ""
+        var parts = source.trim().split(/\s+/).filter(function(part) { return part.length > 0 })
+        if (parts.length === 0)
+            return "U"
+
+        var initials = parts.slice(0, 2).map(function(part) { return part.charAt(0).toUpperCase() }).join("")
+        return initials || "U"
+    }
 
     // slots for right-side buttons — set from parent
     property alias rightContent: rightSlot.data
@@ -78,7 +91,7 @@ Item {
             Rectangle {
                 width: 30; height: 30; radius: 15
                 color: "#3B82F6"
-                Text { anchors.centerIn: parent; text: backend.userProfile.initials; color: "white"; font.pixelSize: 13; font.bold: true }
+                Text { anchors.centerIn: parent; text: root.avatarInitials(); color: "white"; font.pixelSize: 13; font.bold: true }
             }
         }
     }

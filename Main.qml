@@ -2,14 +2,25 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
-
-
 ApplicationWindow {
     id: root
     width:  1280
     height: 800
     visible: true
     title:  "StudyFlow – Smart Study Schedule"
+    color: "#F4F6FA"
+    minimumWidth: 1080
+    minimumHeight: 720
+
+    Shortcut {
+        sequence: "Ctrl+Tab"
+        onActivated: navigation.goToNextPage()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+Tab"
+        onActivated: navigation.goToPreviousPage()
+    }
 
     // Shell: sidebar (fixed left) + content (fills rest)
     RowLayout {
@@ -19,15 +30,17 @@ ApplicationWindow {
         Sidebar {
             id: sidebar
             Layout.fillHeight: true
-            activePage: contentStack.currentIndex
-            onPageSelected: function(idx) { contentStack.currentIndex = idx }
+            Layout.preferredWidth: width
+            pages: navigation.pages
+            activePage: navigation.currentIndex
+            onPageSelected: function(idx) { navigation.navigateToIndex(idx) }
         }
 
         StackLayout {
             id: contentStack
             Layout.fillWidth: true
             Layout.fillHeight: true
-            currentIndex: 0
+            currentIndex: navigation.currentIndex
 
             DashboardScreen          {}   // 0
             TaskInboxScreen          {}   // 1

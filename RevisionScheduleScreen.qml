@@ -3,7 +3,23 @@ import QtQuick.Layouts 1.15
 import QtQuick.Controls 2.15
 
 Rectangle {
+    id: root
     color: "#F4F6FA"
+
+    function aiSuggestionData() {
+        if (typeof backend === "undefined")
+            return null
+        if (backend.aiSuggestion)
+            return backend.aiSuggestion
+        if (backend.notifications) {
+            for (var i = 0; i < backend.notifications.length; ++i) {
+                var notification = backend.notifications[i]
+                if (notification && notification.title === "AI Suggestion")
+                    return { visible: true, text: notification.body || "" }
+            }
+        }
+        return null
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -139,7 +155,10 @@ Rectangle {
                         }
 
                         Rectangle {
-                            visible: backend.aiSuggestion.visible
+                            visible: {
+                                var suggestion = root.aiSuggestionData()
+                                return !!(suggestion && suggestion.visible !== false && (suggestion.text || "").length > 0)
+                            }
                             Layout.fillWidth: true
                             height: 110
                             radius: 12
@@ -155,7 +174,16 @@ Rectangle {
                                     Text { text: "AI Suggestion"; font.pixelSize: 12; font.bold: true; color: "#1D4ED8" }
                                 }
 
-                                Text { text: backend.aiSuggestion.text; font.pixelSize: 11; color: "#1E40AF"; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                                Text {
+                                    text: {
+                                        var suggestion = root.aiSuggestionData()
+                                        return suggestion ? (suggestion.text || "") : ""
+                                    }
+                                    font.pixelSize: 11
+                                    color: "#1E40AF"
+                                    wrapMode: Text.WordWrap
+                                    Layout.fillWidth: true
+                                }
 
                                 RowLayout {
                                     AppButton { label: "Accept"; variant: "primary"; small: true; onClicked: backend.acceptSuggestion() }

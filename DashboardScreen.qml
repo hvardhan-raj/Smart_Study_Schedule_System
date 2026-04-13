@@ -13,7 +13,7 @@ Rectangle {
         PageHeader {
             Layout.fillWidth: true
             pageTitle: "Dashboard"
-            pageSubtitle: "SMART STUDY SCHEDULE"
+            pageSubtitle: "DAILY REVISION BOARD"
             rightContent: [
                 AppButton { label: "+ Start Session"; variant: "primary"; small: true; onClicked: backend.startSession() }
             ]
@@ -27,20 +27,71 @@ Rectangle {
 
             ColumnLayout {
                 width: parent.width
-                spacing: 0
+                spacing: 18
 
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 52
-                    color: "#3B82F6"
+                    Layout.leftMargin: 24
+                    Layout.rightMargin: 24
+                    implicitHeight: 70
+                    radius: 18
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: "#0F4C81" }
+                        GradientStop { position: 1.0; color: "#2563EB" }
+                    }
 
                     RowLayout {
                         anchors { fill: parent; leftMargin: 28; rightMargin: 28 }
+                        spacing: 14
 
-                        Text { text: backend.dashboardBanner.emoji; font.pixelSize: 20 }
-                        Text { text: backend.dashboardBanner.headline; font.pixelSize: 13; font.bold: true; color: "white" }
+                        Rectangle {
+                            width: 34
+                            height: 34
+                            radius: 10
+                            color: Qt.rgba(1, 1, 1, 0.16)
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: backend.dashboardBanner.emoji
+                                font.pixelSize: 18
+                                color: "white"
+                            }
+                        }
+
+                        ColumnLayout {
+                            spacing: 2
+
+                            Text {
+                                text: backend.dashboardBanner.headline
+                                font.pixelSize: 14
+                                font.bold: true
+                                color: "white"
+                            }
+
+                            Text {
+                                text: backend.dashboardBanner.detail
+                                font.pixelSize: 11
+                                color: "#BFDBFE"
+                            }
+                        }
+
                         Item { Layout.fillWidth: true }
-                        Text { text: backend.dashboardBanner.detail; font.pixelSize: 11; color: "#BFDBFE" }
+
+                        Rectangle {
+                            radius: 12
+                            color: Qt.rgba(255, 255, 255, 0.12)
+                            implicitWidth: focusLabel.implicitWidth + 18
+                            implicitHeight: 30
+
+                            Text {
+                                id: focusLabel
+                                anchors.centerIn: parent
+                                text: "Focus score " + backend.dashboardFocus.score + "%"
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: "white"
+                            }
+                        }
                     }
                 }
 
@@ -71,123 +122,105 @@ Rectangle {
                     Layout.bottomMargin: 24
                     spacing: 16
 
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 2
-                        implicitHeight: taskCol.implicitHeight + 32
-                        radius: 12
-                        color: "#FFFFFF"
-
-                        ColumnLayout {
-                            id: taskCol
-                            anchors { fill: parent; margins: 20 }
-                            spacing: 10
-
-                            RowLayout {
-                                Text { text: "Today's Tasks"; font.pixelSize: 14; font.bold: true; color: "#1A2332" }
-                                Item { Layout.fillWidth: true }
-                                TagPill { tagText: backend.todayTasks.length + " remaining"; tagColor: "#3B82F6" }
-                            }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Repeater {
-                                    model: ["TOPIC", "SUBJECT", "DIFFICULTY", "TIME", "STATUS"]
-                                    Text {
-                                        Layout.fillWidth: index === 0
-                                        text: modelData
-                                        font.pixelSize: 9
-                                        font.letterSpacing: 1
-                                        color: "#94A3B8"
-                                    }
-                                }
-                            }
-
-                            Rectangle { Layout.fillWidth: true; height: 1; color: "#F1F5F9" }
-
-                            Repeater {
-                                model: backend.todayTasks
-                                delegate: RowLayout {
-                                    Layout.fillWidth: true
-                                    height: 36
-                                    spacing: 8
-
-                                    Text { Layout.fillWidth: true; text: modelData.name; font.pixelSize: 12; color: "#1A2332"; elide: Text.ElideRight }
-                                    TagPill { tagText: modelData.subjectShort; tagColor: modelData.subjectColor }
-                                    TagPill { tagText: modelData.difficulty; tagColor: modelData.difficultyColor }
-                                    Text { text: modelData.time; font.pixelSize: 11; color: "#64748B"; Layout.preferredWidth: 28 }
-                                    TagPill { tagText: modelData.status; tagColor: modelData.statusColor }
-                                }
-                            }
-                        }
-                    }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 1
-                        spacing: 14
-
-                        Rectangle {
+                    Repeater {
+                        model: backend.dashboardColumns
+                        delegate: Rectangle {
+                            property var columnData: modelData
                             Layout.fillWidth: true
-                            height: 170
-                            radius: 12
+                            Layout.preferredWidth: 1
+                            radius: 18
                             color: "#FFFFFF"
+                            border.width: 1
+                            border.color: Qt.rgba(columnData.accentColor.r, columnData.accentColor.g, columnData.accentColor.b, 0.18)
+                            implicitHeight: 560
 
                             ColumnLayout {
-                                anchors { fill: parent; margins: 20 }
-                                spacing: 8
-
-                                Text { text: "True Confidence"; font.pixelSize: 13; font.bold: true; color: "#1A2332" }
-
-                                Rectangle {
-                                    width: 90
-                                    height: 90
-                                    radius: 45
-                                    color: "#EFF6FF"
-                                    Layout.alignment: Qt.AlignHCenter
-
-                                    Rectangle {
-                                        width: 70
-                                        height: 70
-                                        radius: 35
-                                        color: "#FFFFFF"
-                                        anchors.centerIn: parent
-
-                                        ColumnLayout {
-                                            anchors.centerIn: parent
-                                            spacing: 0
-                                            Text { text: backend.dashboardFocus.score + "%"; font.pixelSize: 18; font.bold: true; color: "#3B82F6"; Layout.alignment: Qt.AlignHCenter }
-                                            Text { text: "score"; font.pixelSize: 9; color: "#94A3B8"; Layout.alignment: Qt.AlignHCenter }
-                                        }
-                                    }
-                                }
-
-                                Text { text: backend.dashboardFocus.nextRevision; font.pixelSize: 10; color: "#94A3B8"; Layout.alignment: Qt.AlignHCenter }
-                            }
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            height: 120
-                            radius: 12
-                            color: "#FFFFFF"
-
-                            ColumnLayout {
-                                anchors { fill: parent; margins: 16 }
-                                spacing: 6
-                                Text { text: "This Week"; font.pixelSize: 13; font.bold: true; color: "#1A2332" }
+                                anchors { fill: parent; margins: 18 }
+                                spacing: 14
 
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    spacing: 6
+                                    spacing: 8
 
-                                    Repeater {
-                                        model: backend.dashboardWeekBars
-                                        delegate: ColumnLayout {
-                                            spacing: 3
-                                            Item { Layout.fillHeight: true }
-                                            Rectangle { width: 10; height: Math.max(16, modelData * 0.5); radius: 3; color: index === 3 ? "#3B82F6" : "#BFDBFE" }
-                                            Text { text: ["M","T","W","T","F","S","S"][index]; font.pixelSize: 8; color: "#94A3B8" }
+                                    Rectangle {
+                                        width: 10
+                                        height: 10
+                                        radius: 5
+                                        color: columnData.accentColor
+                                    }
+
+                                    ColumnLayout {
+                                        spacing: 2
+
+                                        Text {
+                                            text: columnData.title
+                                            font.pixelSize: 15
+                                            font.bold: true
+                                            color: "#1A2332"
+                                        }
+
+                                        Text {
+                                            text: columnData.subtitle
+                                            font.pixelSize: 10
+                                            color: "#94A3B8"
+                                        }
+                                    }
+
+                                    Item { Layout.fillWidth: true }
+
+                                    TagPill {
+                                        tagText: columnData.count + " items"
+                                        tagColor: columnData.accentColor
+                                    }
+                                }
+
+                                ScrollView {
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    contentWidth: availableWidth
+                                    clip: true
+
+                                    ColumnLayout {
+                                        width: parent.width
+                                        spacing: 10
+
+                                        Repeater {
+                                            model: columnData.items
+                                            delegate: DashboardTaskCard {
+                                                Layout.fillWidth: true
+                                                taskData: modelData
+                                                accentColor: columnData.accentColor
+                                            }
+                                        }
+
+                                        Item {
+                                            visible: columnData.items.length === 0
+                                            Layout.fillWidth: true
+                                            implicitHeight: 180
+
+                                            ColumnLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 6
+
+                                                Text {
+                                                    text: columnData.key === "upcoming" ? "No upcoming tasks yet" : "All clear"
+                                                    font.pixelSize: 13
+                                                    font.bold: true
+                                                    color: "#1A2332"
+                                                    Layout.alignment: Qt.AlignHCenter
+                                                }
+
+                                                Text {
+                                                    text: columnData.key === "upcoming"
+                                                        ? "New revisions will appear here as the schedule fills out."
+                                                        : "Nothing waiting in this column right now."
+                                                    font.pixelSize: 10
+                                                    color: "#94A3B8"
+                                                    horizontalAlignment: Text.AlignHCenter
+                                                    wrapMode: Text.WordWrap
+                                                    Layout.alignment: Qt.AlignHCenter
+                                                }
+                                            }
                                         }
                                     }
                                 }

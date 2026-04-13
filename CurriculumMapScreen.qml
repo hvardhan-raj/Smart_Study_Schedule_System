@@ -1,10 +1,52 @@
 import QtQuick 2.15
-import QtQuick.Layouts 1.15
 import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
 
 Rectangle {
     id: root
     color: "#F4F6FA"
+
+    property string editingTopicId: ""
+    property string editingParentId: ""
+
+    function openSubjectDialog() {
+        subjectNameField.text = ""
+        subjectColorField.text = "#3B82F6"
+        addSubjectDialog.open()
+    }
+
+    function openTopicDialog(topicId, parentId, subjectName) {
+        editingTopicId = topicId || ""
+        editingParentId = parentId || ""
+        var topic = findTopicById(topicId)
+        topicNameField.text = topic ? topic.name : ""
+        topicSubjectBox.currentIndex = Math.max(0, backend.curriculumSubjectOptions.indexOf(topic ? topic.subject : (subjectName || backend.curriculumSubjectOptions[0] || "")))
+        topicDifficultyBox.currentIndex = ["Easy", "Medium", "Hard"].indexOf(topic ? topic.difficulty : "Medium")
+        topicNotesField.text = topic ? (topic.notes || "") : ""
+        suggestionBadge.text = ""
+        topicDialog.open()
+    }
+
+    function findTopicById(topicId) {
+        for (var i = 0; i < backend.curriculumSubjects.length; ++i) {
+            var roots = backend.curriculumSubjects[i].topics || []
+            var found = findInNodes(roots, topicId)
+            if (found)
+                return found
+        }
+        return null
+    }
+
+    function findInNodes(nodes, topicId) {
+        for (var i = 0; i < nodes.length; ++i) {
+            if (nodes[i].id === topicId)
+                return nodes[i]
+            var nested = findInNodes(nodes[i].children || [], topicId)
+            if (nested)
+                return nested
+        }
+        return null
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -12,46 +54,54 @@ Rectangle {
 
         PageHeader {
             Layout.fillWidth: true
-            pageTitle: "Curriculum Map"
-            pageSubtitle: "ALL SUBJECTS & TOPICS"
+            pageTitle: "Topic Manager"
+            pageSubtitle: "HIERARCHY, BULK IMPORT, AND NLP SUGGESTIONS"
             rightContent: [
-                AppButton { label: "+ Add Subject"; variant: "secondary"; small: true },
-                AppButton { label: "+ Add Topic"; variant: "primary"; small: true }
+                AppButton { label: "Import"; variant: "secondary"; small: true; onClicked: importDialog.open() },
+                AppButton { label: "+ Add Subject"; variant: "secondary"; small: true; onClicked: root.openSubjectDialog() },
+                AppButton { label: "+ Add Topic"; variant: "primary"; small: true; onClicked: root.openTopicDialog("", "", "") }
             ]
         }
 
         Rectangle {
             Layout.fillWidth: true
-            height: 52
             color: "#FFFFFF"
             border.color: "#E2E8F0"
+            implicitHeight: toolbarRow.implicitHeight + 24
 
             RowLayout {
-                anchors { fill: parent; leftMargin: 24; rightMargin: 24 }
+                id: toolbarRow
+                anchors.fill: parent
+                anchors.margins: 16
                 spacing: 10
 
-                Rectangle {
-                    width: 240; height: 32; radius: 8
-                    color: "#F4F6FA"; border.color: "#E2E8F0"
-                    RowLayout {
-                        anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
-                        spacing: 6
-                        Text { text: "?"; font.pixelSize: 12; color: "#94A3B8" }
-                        Text { text: "Search topics..."; font.pixelSize: 12; color: "#CBD5E1" }
-                    }
+                TextField {
+                    id: searchField
+                    Layout.preferredWidth: 260
+                    placeholderText: "Search topics or subjects"
+                    text: backend.curriculumSearch
+                    onTextChanged: backend.setCurriculumSearch(text)
                 }
 
                 Repeater {
                     model: ["All", "Easy", "Medium", "Hard"]
                     delegate: Rectangle {
-                        property bool sel: modelData === backend.curriculumDifficulty
-                        height: 28
-                        implicitWidth: chipLbl.implicitWidth + 20
-                        radius: 14
-                        color: sel ? "#3B82F6" : "#F4F6FA"
-                        border.color: sel ? "#3B82F6" : "#E2E8F0"
+                        property bool selected: modelData === backend.curriculumDifficulty
+                        radius: 16
+                        implicitWidth: filterLabel.implicitWidth + 22
+                        implicitHeight: 30
+                        color: selected ? "#3B82F6" : "#F8FAFC"
+                        border.width: 1
+                        border.color: selected ? "#3B82F6" : "#E2E8F0"
 
-                        Text { id: chipLbl; anchors.centerIn: parent; text: modelData; font.pixelSize: 11; font.bold: sel; color: sel ? "#FFFFFF" : "#64748B" }
+                        Text {
+                            id: filterLabel
+                            anchors.centerIn: parent
+                            text: modelData
+                            font.pixelSize: 11
+                            font.bold: selected
+                            color: selected ? "#FFFFFF" : "#64748B"
+                        }
 
                         MouseArea {
                             anchors.fill: parent
@@ -63,42 +113,22 @@ Rectangle {
 
                 Item { Layout.fillWidth: true }
 
-                Row {
-                    spacing: 4
-                    Repeater {
-                        model: ["Grid", "List"]
-                        delegate: Rectangle {
-                            width: 64; height: 28; radius: 6
-                            color: index === 0 ? "#EFF6FF" : "transparent"
-                            border.color: index === 0 ? "#BFDBFE" : "#E2E8F0"
-                            Text { anchors.centerIn: parent; text: modelData; font.pixelSize: 11; color: index === 0 ? "#3B82F6" : "#64748B" }
+                Repeater {
+                    model: backend.curriculumSummary.stats || []
+                    delegate: Rectangle {
+                        radius: 14
+                        color: Qt.rgba(modelData.color.r, modelData.color.g, modelData.color.b, 0.10)
+                        implicitWidth: statLabel.implicitWidth + statValue.implicitWidth + 26
+                        implicitHeight: 28
+
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 6
+                            Text { id: statLabel; text: modelData.label; font.pixelSize: 10; color: "#64748B" }
+                            Text { id: statValue; text: modelData.value; font.pixelSize: 10; font.bold: true; color: modelData.color }
                         }
                     }
                 }
-            }
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            height: 48
-            color: "#F8FAFC"
-            border.color: "#E2E8F0"
-
-            RowLayout {
-                anchors { fill: parent; leftMargin: 24; rightMargin: 24 }
-                spacing: 32
-
-                Repeater {
-                    model: backend.curriculumSummary.stats
-                    delegate: RowLayout {
-                        spacing: 6
-                        Rectangle { width: 8; height: 8; radius: 4; color: modelData.color }
-                        Text { text: modelData.label; font.pixelSize: 11; color: "#64748B" }
-                        Text { text: modelData.value; font.pixelSize: 12; font.bold: true; color: "#1A2332" }
-                    }
-                }
-
-                Item { Layout.fillWidth: true }
             }
         }
 
@@ -110,111 +140,212 @@ Rectangle {
 
             ColumnLayout {
                 width: parent.width
-                spacing: 0
+                spacing: 14
 
                 Repeater {
                     model: backend.curriculumSubjects
-                    delegate: ColumnLayout {
-                        property color subjectAccent: modelData.accentColor
+                    delegate: Rectangle {
+                        property var subjectData: modelData
                         Layout.fillWidth: true
-                        spacing: 0
+                        Layout.leftMargin: 20
+                        Layout.rightMargin: 20
+                        radius: 20
+                        color: "#FFFFFF"
+                        border.width: 1
+                        border.color: Qt.rgba(subjectData.accentColor.r, subjectData.accentColor.g, subjectData.accentColor.b, 0.16)
+                        implicitHeight: subjectColumn.implicitHeight + 28
 
-                        Rectangle {
-                            Layout.fillWidth: true
-                            height: 44
-                            color: "#FFFFFF"
-                            border.color: "#F1F5F9"
+                        ColumnLayout {
+                            id: subjectColumn
+                            anchors.fill: parent
+                            anchors.margins: 16
+                            spacing: 12
 
                             RowLayout {
-                                anchors { fill: parent; leftMargin: 24; rightMargin: 24 }
-                                spacing: 12
+                                Layout.fillWidth: true
+                                spacing: 10
 
                                 Rectangle {
-                                    width: 28; height: 28; radius: 8
-                                    color: Qt.rgba(parseInt(modelData.accentColor.slice(1,3),16)/255, parseInt(modelData.accentColor.slice(3,5),16)/255, parseInt(modelData.accentColor.slice(5,7),16)/255, 0.12)
-                                    Text { anchors.centerIn: parent; text: modelData.iconText; font.pixelSize: 14 }
+                                    width: 34
+                                    height: 34
+                                    radius: 10
+                                    color: Qt.rgba(modelData.accentColor.r, modelData.accentColor.g, modelData.accentColor.b, 0.12)
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: subjectData.iconText
+                                        font.pixelSize: 15
+                                        color: subjectData.accentColor
+                                    }
                                 }
 
-                                Text { text: modelData.subjectName; font.pixelSize: 14; font.bold: true; color: "#1A2332" }
-                                TagPill { tagText: modelData.topicCount + " topics"; tagColor: modelData.accentColor }
+                                ColumnLayout {
+                                    spacing: 2
+                                    Text { text: subjectData.subjectName; font.pixelSize: 15; font.bold: true; color: "#1A2332" }
+                                    Text { text: subjectData.topicCount + " topics"; font.pixelSize: 10; color: "#94A3B8" }
+                                }
+
                                 Item { Layout.fillWidth: true }
-                                Text { text: "Active"; font.pixelSize: 11; color: "#94A3B8" }
+
+                                AppButton {
+                                    label: "+ Topic"
+                                    variant: "secondary"
+                                    small: true
+                                    onClicked: root.openTopicDialog("", "", subjectData.subjectName)
+                                }
                             }
-                        }
 
-                        Rectangle {
-                            Layout.fillWidth: true
-                            implicitHeight: topicsRow.implicitHeight + 20
-                            color: "#F8FAFC"
-                            border.color: "#F1F5F9"
-
-                            RowLayout {
-                                id: topicsRow
-                                anchors { fill: parent; margins: 16 }
-                                spacing: 12
-
-                                Repeater {
-                                    model: modelData.topics
-                                    delegate: Rectangle {
-                                        property int topicConfidence: modelData.confidence
-                                        Layout.fillWidth: true
-                                        height: 120
-                                        radius: 10
-                                        color: "#FFFFFF"
-                                        border.color: "#E2E8F0"
-
-                                        Rectangle { width: parent.width; height: 3; radius: 2; anchors.top: parent.top; color: modelData.difficultyColor }
-
-                                        ColumnLayout {
-                                            anchors { fill: parent; margins: 12; topMargin: 14 }
-                                            spacing: 6
-
-                                            Text { text: modelData.name; font.pixelSize: 12; font.bold: true; color: "#1A2332"; elide: Text.ElideRight; Layout.fillWidth: true }
-
-                                            RowLayout {
-                                                spacing: 6
-                                                TagPill { tagText: modelData.difficulty; tagColor: modelData.difficultyColor }
-
-                                                Row {
-                                                    spacing: 1
-                                                    Repeater {
-                                                        model: 5
-                                                        Text { text: "*"; font.pixelSize: 10; color: index < topicConfidence ? "#F59E0B" : "#E2E8F0" }
-                                                    }
-                                                }
-                                            }
-
-                                            ColumnLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 3
-
-                                                RowLayout {
-                                                    Text { text: "Progress"; font.pixelSize: 9; color: "#94A3B8"; Layout.fillWidth: true }
-                                                    Text { text: modelData.progress + "%"; font.pixelSize: 9; font.bold: true; color: "#374151" }
-                                                }
-
-                                                Rectangle {
-                                                    Layout.fillWidth: true
-                                                    height: 5; radius: 3
-                                                    color: "#F1F5F9"
-                                                    Rectangle { width: parent.width * (modelData.progress / 100); height: parent.height; radius: parent.radius; color: subjectAccent }
-                                                }
-                                            }
-
-                                            RowLayout {
-                                                spacing: 6
-                                                AppButton { label: "Review"; variant: "primary"; small: true; Layout.fillWidth: true }
-                                                AppButton { label: "Edit"; variant: "secondary"; small: true }
-                                            }
-                                        }
-                                    }
+                            Repeater {
+                                model: subjectData.topics
+                                delegate: TopicTreeCard {
+                                    Layout.fillWidth: true
+                                    nodeData: modelData
+                                    accentColor: subjectData.accentColor
+                                    onRequestEdit: function(topicId) { root.openTopicDialog(topicId, "", nodeData.subject) }
+                                    onRequestAddChild: function(topicId, subjectName) { root.openTopicDialog("", topicId, subjectName) }
                                 }
                             }
                         }
                     }
                 }
 
-                Item { height: 24 }
+                Item {
+                    visible: backend.curriculumSubjects.length === 0
+                    Layout.fillWidth: true
+                    implicitHeight: 220
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 8
+                        Text { text: "No topics match this view"; font.pixelSize: 15; font.bold: true; color: "#1A2332" }
+                        Text { text: "Try a different filter, or add/import topics to begin."; font.pixelSize: 11; color: "#94A3B8" }
+                    }
+                }
+
+                Item { height: 16 }
+            }
+        }
+    }
+
+    Dialog {
+        id: addSubjectDialog
+        modal: true
+        width: 360
+        title: "Add Subject"
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onAccepted: backend.addSubject(subjectNameField.text, subjectColorField.text)
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+
+            TextField {
+                id: subjectNameField
+                Layout.fillWidth: true
+                placeholderText: "Subject name"
+            }
+
+            TextField {
+                id: subjectColorField
+                Layout.fillWidth: true
+                placeholderText: "#3B82F6"
+            }
+        }
+    }
+
+    Dialog {
+        id: topicDialog
+        modal: true
+        width: 420
+        title: editingTopicId ? "Edit Topic" : "Add Topic"
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onAccepted: backend.upsertTopic(
+            editingTopicId,
+            topicNameField.text,
+            topicSubjectBox.currentText,
+            topicDifficultyBox.currentText,
+            editingParentId,
+            topicNotesField.text
+        )
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+
+            TextField {
+                id: topicNameField
+                Layout.fillWidth: true
+                placeholderText: "Topic name"
+                onEditingFinished: {
+                    var suggestion = backend.suggestTopicDifficulty(text)
+                    if (suggestion.difficulty) {
+                        topicDifficultyBox.currentIndex = ["Easy", "Medium", "Hard"].indexOf(suggestion.difficulty)
+                        suggestionBadge.text = "Suggested " + suggestion.difficulty + " (" + Math.round(suggestion.confidence * 100) + "%)"
+                    } else if (text.length > 0) {
+                        suggestionBadge.text = "No strong suggestion yet"
+                    }
+                }
+            }
+
+            ComboBox {
+                id: topicSubjectBox
+                Layout.fillWidth: true
+                model: backend.curriculumSubjectOptions
+            }
+
+            ComboBox {
+                id: topicDifficultyBox
+                Layout.fillWidth: true
+                model: ["Easy", "Medium", "Hard"]
+            }
+
+            Text {
+                id: suggestionBadge
+                Layout.fillWidth: true
+                color: "#3B82F6"
+                font.pixelSize: 10
+                wrapMode: Text.WordWrap
+            }
+
+            TextArea {
+                id: topicNotesField
+                Layout.fillWidth: true
+                Layout.preferredHeight: 100
+                placeholderText: "Notes"
+                wrapMode: TextEdit.WordWrap
+            }
+        }
+    }
+
+    Dialog {
+        id: importDialog
+        modal: true
+        width: 480
+        title: "Bulk Import Topics"
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onAccepted: backend.importTopics(importText.text, importSubjectBox.currentText, csvModeCheck.checked)
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+
+            ComboBox {
+                id: importSubjectBox
+                Layout.fillWidth: true
+                model: backend.curriculumSubjectOptions
+            }
+
+            CheckBox {
+                id: csvModeCheck
+                text: "Treat input as CSV (first column)"
+            }
+
+            TextArea {
+                id: importText
+                Layout.fillWidth: true
+                Layout.preferredHeight: 180
+                placeholderText: "Paste one topic per line, or CSV rows"
+                wrapMode: TextEdit.WordWrap
             }
         }
     }
