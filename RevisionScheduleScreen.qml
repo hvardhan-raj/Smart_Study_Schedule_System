@@ -6,19 +6,25 @@ Rectangle {
     id: root
     color: "#F4F6FA"
 
-    function aiSuggestionData() {
-        if (typeof backend === "undefined")
-            return null
-        if (backend.aiSuggestion)
-            return backend.aiSuggestion
-        if (backend.notifications) {
-            for (var i = 0; i < backend.notifications.length; ++i) {
-                var notification = backend.notifications[i]
-                if (notification && notification.title === "AI Suggestion")
-                    return { visible: true, text: notification.body || "" }
-            }
-        }
-        return null
+    property var backendRef: (typeof backend !== "undefined" && backend !== null) ? backend : null
+    property var monthCells: backendRef ? backendRef.calendarCells : []
+    property var selectedSessions: backendRef ? backendRef.selectedDaySessions : []
+    property var dueSoon: backendRef ? backendRef.upcomingReminders : []
+    property var weekRows: backendRef ? backendRef.weekCompletion : []
+    property var weekSummary: backendRef ? backendRef.revisionWeekSummary : ({ score: 0, completed: 0, remaining: 0, missed: 0, scheduled: 0 })
+    property string monthLabel: backendRef ? backendRef.calendarMonthLabel : "Revision Schedule"
+    property string dayLabel: backendRef ? backendRef.selectedDayLabel : "Select a day"
+    property string totalText: backendRef ? backendRef.selectedDayTotalText : "0 min"
+
+    function sessionCardColor(session) {
+        if (!session)
+            return "#3B82F6"
+        return session.color || session.subjectColor || "#3B82F6"
+    }
+
+    function sessionBgColor(session) {
+        var accent = sessionCardColor(session)
+        return Qt.rgba(accent.r, accent.g, accent.b, 0.08)
     }
 
     ColumnLayout {
@@ -28,11 +34,16 @@ Rectangle {
         PageHeader {
             Layout.fillWidth: true
             pageTitle: "Revision Schedule"
-            pageSubtitle: "SPACED REPETITION PLANNER"
+            pageSubtitle: "CALENDAR, DUE SESSIONS, AND WEEKLY LOAD"
             rightContent: [
-                AppButton { label: "Regenerate"; variant: "secondary"; small: true },
-                AppButton { label: "Export"; variant: "secondary"; small: true },
-                AppButton { label: "+ Add Session"; variant: "primary"; small: true }
+                AppButton { label: "Today"; variant: "secondary"; small: true; onClicked: if (root.backendRef) root.backendRef.goToToday() },
+                AppButton { label: "Tomorrow"; variant: "secondary"; small: true; onClicked: if (root.backendRef) root.backendRef.selectTomorrow() },
+                AppButton {
+                    label: "+ Add Session"
+                    variant: "primary"
+                    small: true
+                    onClicked: if (typeof navigation !== "undefined" && navigation !== null) navigation.navigateToRoute("tasks")
+                }
             ]
         }
 
@@ -44,74 +55,127 @@ Rectangle {
 
             ColumnLayout {
                 width: parent.width
-                spacing: 0
+                spacing: 18
 
                 RowLayout {
                     Layout.fillWidth: true
-                    Layout.margins: 24
+                    Layout.leftMargin: 24
+                    Layout.rightMargin: 24
+                    Layout.topMargin: 20
                     spacing: 16
 
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredWidth: 3
-                        implicitHeight: calGrid.implicitHeight + 32
-                        radius: 12
+                        radius: 18
                         color: "#FFFFFF"
+                        border.color: "#E2E8F0"
+                        implicitHeight: calendarPanel.implicitHeight + 36
 
                         ColumnLayout {
-                            id: calGrid
-                            anchors { fill: parent; margins: 20 }
-                            spacing: 12
+                            id: calendarPanel
+                            anchors.fill: parent
+                            anchors.margins: 18
+                            spacing: 14
 
                             RowLayout {
-                                Text { text: "<"; font.pixelSize: 14; color: "#64748B" }
-                                Text { text: backend.scheduleTitle; font.pixelSize: 13; font.bold: true; color: "#1A2332"; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter }
-                                Text { text: ">"; font.pixelSize: 14; color: "#64748B" }
+                                Layout.fillWidth: true
+
+                                AppButton {
+                                    label: "<"
+                                    variant: "ghost"
+                                    small: true
+                                    onClicked: if (root.backendRef) root.backendRef.changeCalendarMonth(-1)
+                                }
+
+                                Text {
+                                    text: root.monthLabel
+                                    font.pixelSize: 17
+                                    font.bold: true
+                                    color: "#0F172A"
+                                    Layout.fillWidth: true
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
+
+                                AppButton {
+                                    label: ">"
+                                    variant: "ghost"
+                                    small: true
+                                    onClicked: if (root.backendRef) root.backendRef.changeCalendarMonth(1)
+                                }
                             }
 
                             RowLayout {
+                                Layout.fillWidth: true
                                 spacing: 8
 
                                 Repeater {
-                                    model: backend.scheduleDays
+                                    model: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+                                    delegate: Text {
+                                        Layout.fillWidth: true
+                                        text: modelData
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        color: "#94A3B8"
+                                        horizontalAlignment: Text.AlignHCenter
+                                    }
+                                }
+                            }
+
+                            GridLayout {
+                                Layout.fillWidth: true
+                                columns: 7
+                                columnSpacing: 8
+                                rowSpacing: 8
+
+                                Repeater {
+                                    model: root.monthCells
 
                                     delegate: Rectangle {
                                         Layout.fillWidth: true
-                                        implicitHeight: dayCol.implicitHeight + 16
-                                        radius: 10
-                                        color: modelData.isCurrent ? "#EFF6FF" : "#F8FAFC"
-                                        border.color: modelData.isCurrent ? "#BFDBFE" : "#E2E8F0"
+                                        Layout.preferredHeight: 74
+                                        radius: 12
+                                        color: modelData.isSelected ? "#3B82F6" : (modelData.isToday ? "#EFF6FF" : "#F8FAFC")
+                                        border.color: modelData.isSelected ? "#3B82F6" : (modelData.isToday ? "#BFDBFE" : "#E2E8F0")
+                                        opacity: modelData.isValid ? 1.0 : 0.5
 
                                         ColumnLayout {
-                                            id: dayCol
-                                            anchors { fill: parent; margins: 10 }
-                                            spacing: 6
+                                            anchors.fill: parent
+                                            anchors.margins: 8
+                                            spacing: 4
 
-                                            Text { text: modelData.day; font.pixelSize: 9; font.letterSpacing: 1.2; color: "#94A3B8"; Layout.alignment: Qt.AlignHCenter }
-                                            Text { text: modelData.date; font.pixelSize: 16; font.bold: true; color: modelData.isCurrent ? "#3B82F6" : "#1A2332"; Layout.alignment: Qt.AlignHCenter }
-                                            Rectangle { Layout.fillWidth: true; height: 1; color: "#E2E8F0" }
+                                            Text {
+                                                text: modelData.dayNum
+                                                visible: modelData.isValid
+                                                font.pixelSize: 13
+                                                font.bold: modelData.isToday || modelData.isSelected
+                                                color: modelData.isSelected ? "#FFFFFF" : "#1A2332"
+                                            }
 
-                                            Repeater {
-                                                model: modelData.tasks
-                                                delegate: Rectangle {
-                                                    Layout.fillWidth: true
-                                                    height: 28
-                                                    radius: 6
-                                                    color: ["#EFF6FF","#ECFDF5","#F5F3FF","#FFFBEB","#FEF2F2"][index % 5]
-                                                    Text {
-                                                        anchors.fill: parent
-                                                        anchors.leftMargin: 6
-                                                        anchors.rightMargin: 6
-                                                        text: modelData
-                                                        font.pixelSize: 9
-                                                        color: "#374151"
-                                                        elide: Text.ElideRight
-                                                        verticalAlignment: Text.AlignVCenter
-                                                    }
+                                            Rectangle {
+                                                visible: modelData.taskCount > 0 && modelData.isValid
+                                                implicitWidth: 22
+                                                implicitHeight: 18
+                                                radius: 9
+                                                color: modelData.isSelected ? Qt.rgba(1, 1, 1, 0.18) : "#DBEAFE"
+
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: modelData.taskCount
+                                                    font.pixelSize: 10
+                                                    font.bold: true
+                                                    color: modelData.isSelected ? "#FFFFFF" : "#2563EB"
                                                 }
                                             }
 
-                                            Text { visible: modelData.tasks.length === 0; text: "-"; font.pixelSize: 11; color: "#CBD5E1"; Layout.alignment: Qt.AlignHCenter }
+                                            Item { Layout.fillHeight: true }
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            enabled: modelData.isValid && root.backendRef
+                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                            onClicked: root.backendRef.selectCalendarDay(modelData.dateStr)
                                         }
                                     }
                                 }
@@ -121,117 +185,273 @@ Rectangle {
 
                     ColumnLayout {
                         Layout.fillWidth: true
-                        Layout.preferredWidth: 1
-                        spacing: 14
+                        Layout.preferredWidth: 2
+                        spacing: 16
 
                         Rectangle {
                             Layout.fillWidth: true
-                            implicitHeight: dueList.implicitHeight + 32
-                            radius: 12
+                            radius: 18
                             color: "#FFFFFF"
+                            border.color: "#E2E8F0"
+                            implicitHeight: selectedPanel.implicitHeight + 34
 
                             ColumnLayout {
-                                id: dueList
-                                anchors { fill: parent; margins: 20 }
-                                spacing: 8
+                                id: selectedPanel
+                                anchors.fill: parent
+                                anchors.margins: 18
+                                spacing: 12
 
                                 RowLayout {
-                                    Text { text: "Next Due"; font.pixelSize: 13; font.bold: true; color: "#1A2332" }
-                                    Item { Layout.fillWidth: true }
-                                    Text { text: "View all"; font.pixelSize: 10; color: "#3B82F6" }
+                                    Layout.fillWidth: true
+                                    Text {
+                                        text: root.dayLabel
+                                        font.pixelSize: 16
+                                        font.bold: true
+                                        color: "#0F172A"
+                                        Layout.fillWidth: true
+                                    }
+                                    TagPill {
+                                        tagText: root.selectedSessions.length + (root.selectedSessions.length === 1 ? " session" : " sessions")
+                                        tagColor: "#3B82F6"
+                                    }
                                 }
 
                                 Repeater {
-                                    model: backend.nextDueTasks
-                                    delegate: RowLayout {
+                                    model: root.selectedSessions
+
+                                    delegate: Rectangle {
                                         Layout.fillWidth: true
-                                        spacing: 8
-                                        Rectangle { width: 6; height: 6; radius: 3; color: modelData.color }
-                                        Text { Layout.fillWidth: true; text: modelData.name; font.pixelSize: 11; color: "#374151"; elide: Text.ElideRight }
-                                        Text { text: modelData.when; font.pixelSize: 10; color: "#94A3B8" }
-                                    }
-                                }
-                            }
-                        }
+                                        implicitHeight: 64
+                                        radius: 12
+                                        color: root.sessionBgColor(modelData)
+                                        border.color: Qt.rgba(root.sessionCardColor(modelData).r, root.sessionCardColor(modelData).g, root.sessionCardColor(modelData).b, 0.16)
 
-                        Rectangle {
-                            visible: {
-                                var suggestion = root.aiSuggestionData()
-                                return !!(suggestion && suggestion.visible !== false && (suggestion.text || "").length > 0)
-                            }
-                            Layout.fillWidth: true
-                            height: 110
-                            radius: 12
-                            color: "#EFF6FF"
-                            border.color: "#BFDBFE"
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 12
+                                            spacing: 10
 
-                            ColumnLayout {
-                                anchors { fill: parent; margins: 16 }
-                                spacing: 6
+                                            Rectangle {
+                                                Layout.preferredWidth: 4
+                                                Layout.fillHeight: true
+                                                radius: 2
+                                                color: root.sessionCardColor(modelData)
+                                            }
 
-                                RowLayout {
-                                    Text { text: "AI"; font.pixelSize: 14 }
-                                    Text { text: "AI Suggestion"; font.pixelSize: 12; font.bold: true; color: "#1D4ED8" }
-                                }
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 3
 
-                                Text {
-                                    text: {
-                                        var suggestion = root.aiSuggestionData()
-                                        return suggestion ? (suggestion.text || "") : ""
-                                    }
-                                    font.pixelSize: 11
-                                    color: "#1E40AF"
-                                    wrapMode: Text.WordWrap
-                                    Layout.fillWidth: true
-                                }
+                                                Text {
+                                                    text: modelData.topic
+                                                    font.pixelSize: 12
+                                                    font.bold: true
+                                                    color: "#0F172A"
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
 
-                                RowLayout {
-                                    AppButton { label: "Accept"; variant: "primary"; small: true; onClicked: backend.acceptSuggestion() }
-                                    AppButton { label: "Dismiss"; variant: "ghost"; small: true; onClicked: backend.dismissSuggestion() }
-                                }
-                            }
-                        }
+                                                RowLayout {
+                                                    spacing: 6
 
-                        Rectangle {
-                            Layout.fillWidth: true
-                            height: 130
-                            radius: 12
-                            color: "#FFFFFF"
+                                                    Text { text: modelData.subject; font.pixelSize: 10; color: root.sessionCardColor(modelData) }
+                                                    Text { text: modelData.time; font.pixelSize: 10; color: "#64748B" }
+                                                    Text { text: modelData.durationText; font.pixelSize: 10; color: "#94A3B8" }
+                                                }
+                                            }
 
-                            ColumnLayout {
-                                anchors { fill: parent; margins: 16 }
-                                spacing: 6
-                                Text { text: "Week Completion"; font.pixelSize: 13; font.bold: true; color: "#1A2332" }
-
-                                RowLayout {
-                                    spacing: 16
-
-                                    Rectangle {
-                                        width: 70; height: 70; radius: 35
-                                        color: "#EFF6FF"
-                                        Rectangle {
-                                            width: 52; height: 52; radius: 26
-                                            color: "#FFFFFF"; anchors.centerIn: parent
-                                            Text { anchors.centerIn: parent; text: backend.weekCompletion.score + "%"; font.pixelSize: 16; font.bold: true; color: "#3B82F6" }
-                                        }
-                                    }
-
-                                    ColumnLayout {
-                                        spacing: 4
-                                        Repeater {
-                                            model: [
-                                                { lbl: "Completed", val: backend.weekCompletion.completed, col: "#10B981" },
-                                                { lbl: "Remaining", val: backend.weekCompletion.remaining, col: "#F59E0B" },
-                                                { lbl: "Missed", val: backend.weekCompletion.missed, col: "#EF4444" }
-                                            ]
-                                            delegate: RowLayout {
-                                                spacing: 6
-                                                Rectangle { width: 8; height: 8; radius: 4; color: modelData.col }
-                                                Text { text: modelData.lbl; font.pixelSize: 11; color: "#64748B" }
-                                                Text { text: modelData.val; font.pixelSize: 11; font.bold: true; color: "#1A2332" }
+                                            TagPill {
+                                                tagText: modelData.completed ? "Done" : modelData.status
+                                                tagColor: modelData.completed ? "#10B981" : root.sessionCardColor(modelData)
                                             }
                                         }
                                     }
+                                }
+
+                                Text {
+                                    visible: root.selectedSessions.length === 0
+                                    text: "No sessions planned for this day."
+                                    font.pixelSize: 11
+                                    color: "#94A3B8"
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    implicitHeight: 42
+                                    radius: 10
+                                    color: "#F8FAFC"
+                                    border.color: "#E2E8F0"
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 12
+                                        anchors.rightMargin: 12
+                                        Text { text: "Total scheduled"; font.pixelSize: 11; color: "#64748B"; Layout.fillWidth: true }
+                                        Text { text: root.totalText; font.pixelSize: 12; font.bold: true; color: "#0F172A" }
+                                    }
+                                }
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 16
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                radius: 18
+                                color: "#FFFFFF"
+                                border.color: "#E2E8F0"
+                                implicitHeight: weekPanel.implicitHeight + 34
+
+                                ColumnLayout {
+                                    id: weekPanel
+                                    anchors.fill: parent
+                                    anchors.margins: 18
+                                    spacing: 10
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Text { text: "This Week"; font.pixelSize: 15; font.bold: true; color: "#0F172A"; Layout.fillWidth: true }
+                                        TagPill { tagText: root.weekSummary.score + "% complete"; tagColor: "#10B981" }
+                                    }
+
+                                    Repeater {
+                                        model: root.weekRows
+                                        delegate: RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 8
+
+                                            Text {
+                                                text: modelData.day
+                                                font.pixelSize: 11
+                                                font.bold: modelData.isToday
+                                                color: modelData.isToday ? "#2563EB" : "#64748B"
+                                                Layout.preferredWidth: 30
+                                            }
+
+                                            Rectangle {
+                                                Layout.fillWidth: true
+                                                implicitHeight: 8
+                                                radius: 4
+                                                color: "#E2E8F0"
+
+                                                Rectangle {
+                                                    width: parent.width * (modelData.scheduled > 0 ? modelData.completed / modelData.scheduled : 0)
+                                                    height: parent.height
+                                                    radius: 4
+                                                    color: modelData.completed === modelData.scheduled && modelData.scheduled > 0 ? "#10B981" : "#3B82F6"
+                                                }
+                                            }
+
+                                            Text {
+                                                text: modelData.completed + "/" + modelData.scheduled
+                                                font.pixelSize: 10
+                                                color: "#94A3B8"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                radius: 18
+                                color: "#FFFFFF"
+                                border.color: "#E2E8F0"
+                                implicitHeight: duePanel.implicitHeight + 34
+
+                                ColumnLayout {
+                                    id: duePanel
+                                    anchors.fill: parent
+                                    anchors.margins: 18
+                                    spacing: 10
+
+                                    Text { text: "Next Due"; font.pixelSize: 15; font.bold: true; color: "#0F172A" }
+
+                                    Repeater {
+                                        model: root.dueSoon
+                                        delegate: RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 8
+
+                                            Rectangle {
+                                                Layout.preferredWidth: 8
+                                                Layout.preferredHeight: 8
+                                                radius: 4
+                                                color: modelData.color
+                                            }
+
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 2
+                                                Text {
+                                                    text: modelData.title
+                                                    font.pixelSize: 11
+                                                    font.bold: true
+                                                    color: "#0F172A"
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                                Text {
+                                                    text: modelData.subject + " • " + modelData.when
+                                                    font.pixelSize: 10
+                                                    color: "#94A3B8"
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Text {
+                                        visible: root.dueSoon.length === 0
+                                        text: "No upcoming sessions."
+                                        font.pixelSize: 11
+                                        color: "#94A3B8"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 24
+                    Layout.rightMargin: 24
+                    Layout.bottomMargin: 24
+                    radius: 18
+                    color: "#FFFFFF"
+                    border.color: "#E2E8F0"
+                    implicitHeight: summaryRow.implicitHeight + 32
+
+                    RowLayout {
+                        id: summaryRow
+                        anchors.fill: parent
+                        anchors.margins: 16
+                        spacing: 14
+
+                        Repeater {
+                            model: [
+                                { label: "Completed", value: root.weekSummary.completed, color: "#10B981" },
+                                { label: "Remaining", value: root.weekSummary.remaining, color: "#F59E0B" },
+                                { label: "Missed", value: root.weekSummary.missed, color: "#EF4444" },
+                                { label: "Scheduled", value: root.weekSummary.scheduled, color: "#3B82F6" }
+                            ]
+
+                            delegate: Rectangle {
+                                Layout.fillWidth: true
+                                implicitHeight: 62
+                                radius: 14
+                                color: Qt.rgba(modelData.color.r, modelData.color.g, modelData.color.b, 0.08)
+                                border.color: Qt.rgba(modelData.color.r, modelData.color.g, modelData.color.b, 0.14)
+
+                                Column {
+                                    anchors.centerIn: parent
+                                    spacing: 4
+                                    Text { text: modelData.value; font.pixelSize: 18; font.bold: true; color: "#0F172A"; horizontalAlignment: Text.AlignHCenter }
+                                    Text { text: modelData.label; font.pixelSize: 10; color: modelData.color; horizontalAlignment: Text.AlignHCenter }
                                 }
                             }
                         }

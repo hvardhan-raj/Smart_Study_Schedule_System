@@ -771,11 +771,29 @@ class StudyFlowBackend(QObject):
         today = self._today
         start_of_week = today - timedelta(days=today.weekday())
         current_week = [start_of_week + timedelta(days=i) for i in range(7)]
-        completed = sum(
-            1 for task in self._tasks if self._is_task_completed(task) and task["scheduled_at"].date() in current_week
-        )
-        score = round((completed / len(current_week)) * 100) if current_week else 0
-        return [{"day": day.strftime("%a"), "completed": completed, "score": score} for day in current_week]
+        rows = []
+        total_completed = 0
+        total_scheduled = 0
+        for day in current_week:
+            day_tasks = [task for task in self._tasks if task["scheduled_at"].date() == day]
+            completed = len([task for task in day_tasks if self._is_task_completed(task)])
+            scheduled = len(day_tasks)
+            total_completed += completed
+            total_scheduled += scheduled
+            rows.append(
+                {
+                    "day": day.strftime("%a"),
+                    "date": day.strftime("%d"),
+                    "completed": completed,
+                    "scheduled": scheduled,
+                    "remaining": max(0, scheduled - completed),
+                    "isToday": day == today,
+                }
+            )
+        score = round((total_completed / total_scheduled) * 100) if total_scheduled else 0
+        for row in rows:
+            row["score"] = score
+        return rows
 
     @Property("QVariantList", notify=stateChanged)
     def dashboardWeekBars(self) -> list[int]:
@@ -842,14 +860,50 @@ class StudyFlowBackend(QObject):
     @Property("QVariantList", notify=stateChanged)
     def selectedDaySessions(self) -> list[dict[str, Any]]:
         tasks = [task for task in self._tasks if task["scheduled_at"].date() == self._selected_date]
+        tasks.sort(key=lambda task: task["scheduled_at"])
         return [
             {
+                "id": task["id"],
+                "topic": task["topic"],
+                "name": task["topic"],
                 "subject": SUBJECT_DISPLAY_NAMES.get(task["subject"], task["subject"]),
                 "duration": task["duration_minutes"],
+                "time": task["scheduled_at"].strftime("%H:%M"),
+                "durationText": f"{task['duration_minutes']} min",
+                "color": self._subject_meta(task["subject"]).color,
+                "subjectColor": self._subject_meta(task["subject"]).color,
+                "status": self._task_payload(task)["status"],
                 "completed": self._is_task_completed(task),
             }
             for task in tasks
         ]
+
+    @Property(str, notify=stateChanged)
+    def selectedDayTotalText(self) -> str:
+        total_minutes = sum(session["duration"] for session in self.selectedDaySessions)
+        return f"{total_minutes} min"
+
+    @Property("QVariantMap", notify=stateChanged)
+    def revisionWeekSummary(self) -> dict[str, Any]:
+        weekly_rows = self.weekCompletion
+        completed = sum(row["completed"] for row in weekly_rows)
+        scheduled = sum(row["scheduled"] for row in weekly_rows)
+        remaining = max(0, scheduled - completed)
+        missed = len(
+            [
+                task
+                for task in self._tasks
+                if task["scheduled_at"].date() < self._today and not self._is_task_completed(task)
+            ]
+        )
+        score = round((completed / scheduled) * 100) if scheduled else 0
+        return {
+            "completed": completed,
+            "remaining": remaining,
+            "missed": missed,
+            "score": score,
+            "scheduled": scheduled,
+        }
 
     @Property("QVariantList", notify=stateChanged)
     def subjectConfidence(self) -> list[dict[str, Any]]:
