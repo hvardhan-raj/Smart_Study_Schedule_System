@@ -84,79 +84,15 @@ Rectangle {
         }
 
         Item { Layout.fillHeight: true }
-
-        // ── Divider ──────────────────────────────────────────────────
-        Rectangle {
-            Layout.fillWidth: true
+        Text {
             Layout.leftMargin: 20
             Layout.rightMargin: 20
-            height: 1
-            color: "#1F2F40"
-        }
-
-        Item { height: 14 }
-
-        // ── User row ─────────────────────────────────────────────────
-        RowLayout {
-            Layout.leftMargin: 16
-            Layout.rightMargin: 16
             Layout.bottomMargin: 18
-            spacing: 10
-
-            Rectangle {
-                width: 34; height: 34; radius: 17
-                gradient: Gradient {
-                    GradientStop { position: 0.0; color: "#3B82F6" }
-                    GradientStop { position: 1.0; color: "#1D4ED8" }
-                }
-                Text {
-                    anchors.centerIn: parent
-                    text: {
-                        var name = backend.userProfile.name || "U"
-                        return name.charAt(0).toUpperCase()
-                    }
-                    color: "white"
-                    font.pixelSize: 14
-                    font.bold: true
-                }
-            }
-
-            ColumnLayout {
-                spacing: 1
-                Text {
-                    text: backend.userProfile.name || "User"
-                    font.pixelSize: 12
-                    font.bold: true
-                    color: "#FFFFFF"
-                    font.family: "Segoe UI"
-                    elide: Text.ElideRight
-                    Layout.maximumWidth: 110
-                }
-                Text {
-                    text: backend.userProfile.plan || "Learner"
-                    font.pixelSize: 9
-                    color: "#6B7C94"
-                    font.family: "Segoe UI"
-                }
-            }
-
-            Item { Layout.fillWidth: true }
-
-            Rectangle {
-                width: 26; height: 26; radius: 13
-                color: "#1F2F40"
-                Text {
-                    anchors.centerIn: parent
-                    text: "⚙"
-                    font.pixelSize: 11
-                    color: "#6B7C94"
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.pageSelected(8)
-                }
-            }
+            text: "Focused planning, faster reviews."
+            wrapMode: Text.WordWrap
+            font.pixelSize: 10
+            font.family: "Segoe UI"
+            color: "#6B7C94"
         }
     }
 }

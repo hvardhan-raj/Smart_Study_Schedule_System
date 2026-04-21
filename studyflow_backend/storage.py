@@ -13,7 +13,6 @@ from .defaults import (
     default_settings,
     default_study_minutes,
     default_topics,
-    default_user,
 )
 
 
@@ -59,7 +58,6 @@ def deserialize_notifications(notifications: list[dict[str, Any]]) -> list[dict[
 
 def load_state(store_path: Path, today: date) -> dict[str, Any]:
     state = {
-        "user": default_user(),
         "settings": default_settings(),
         "alert_settings": default_alert_settings(),
         "reminder_preferences": {
@@ -87,7 +85,6 @@ def load_state(store_path: Path, today: date) -> dict[str, Any]:
     if store_path.exists():
         try:
             payload = json.loads(store_path.read_text(encoding="utf-8"))
-            state["user"].update(payload.get("user", {}))
             state["settings"] = merge_nested(state["settings"], payload.get("settings", {}))
             state["alert_settings"].update(payload.get("alert_settings", {}))
             state["reminder_preferences"].update(payload.get("reminder_preferences", {}))
@@ -109,7 +106,6 @@ def load_state(store_path: Path, today: date) -> dict[str, Any]:
 
 def save_state(store_path: Path, state: dict[str, Any]) -> None:
     payload = {
-        "user": state["user"],
         "settings": state["settings"],
         "alert_settings": state["alert_settings"],
         "reminder_preferences": state["reminder_preferences"],

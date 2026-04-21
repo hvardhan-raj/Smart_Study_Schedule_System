@@ -3,7 +3,9 @@ import QtQuick.Layouts 1.15
 import QtQuick.Controls 2.15
 
 Rectangle {
+    id: root
     color: "#F4F6FA"
+    property bool composerOpen: false
 
     ColumnLayout {
         anchors.fill: parent
@@ -15,8 +17,101 @@ Rectangle {
             pageSubtitle: "PENDING REVISIONS"
             rightContent: [
                 AppButton { label: "Mark All Done"; variant: "secondary"; small: true; onClicked: backend.markAllTasksDone() },
-                AppButton { label: "+ Add Task"; variant: "primary"; small: true }
+                AppButton {
+                    label: root.composerOpen ? "Close" : "+ Add Task"
+                    variant: "primary"
+                    small: true
+                    onClicked: root.composerOpen = !root.composerOpen
+                }
             ]
+        }
+
+        Rectangle {
+            visible: root.composerOpen
+            Layout.fillWidth: true
+            implicitHeight: composerLayout.implicitHeight + 28
+            color: "#FFFFFF"
+            border.color: "#E2E8F0"
+
+            ColumnLayout {
+                id: composerLayout
+                anchors.fill: parent
+                anchors.margins: 14
+                spacing: 12
+
+                Text {
+                    text: "Create A Task"
+                    font.pixelSize: 13
+                    font.bold: true
+                    color: "#0F172A"
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: 36
+                        radius: 10
+                        color: "#F8FAFC"
+                        border.color: taskNameField.activeFocus ? "#93C5FD" : "#DDE4EF"
+
+                        TextField {
+                            id: taskNameField
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            placeholderText: "Topic or task name"
+                            font.pixelSize: 12
+                            background: Item {}
+                        }
+                    }
+
+                    ComboBox {
+                        id: subjectBox
+                        Layout.preferredWidth: 160
+                        model: backend.curriculumSubjectOptions
+                    }
+
+                    ComboBox {
+                        id: difficultyBox
+                        Layout.preferredWidth: 120
+                        model: ["Easy", "Medium", "Hard"]
+                    }
+
+                    ComboBox {
+                        id: scheduleBox
+                        Layout.preferredWidth: 130
+                        textRole: "label"
+                        valueRole: "key"
+                        model: [
+                            { label: "Today", key: "today" },
+                            { label: "Tomorrow", key: "tomorrow" },
+                            { label: "This Week", key: "this_week" },
+                            { label: "Overdue", key: "overdue" }
+                        ]
+                    }
+
+                    AppButton {
+                        label: "Create"
+                        variant: "primary"
+                        enabled: taskNameField.text.trim().length > 0
+                        onClicked: {
+                            backend.addTask(
+                                taskNameField.text,
+                                subjectBox.currentText,
+                                difficultyBox.currentText,
+                                scheduleBox.currentValue
+                            )
+                            taskNameField.text = ""
+                            difficultyBox.currentIndex = 1
+                            scheduleBox.currentIndex = 0
+                            root.composerOpen = false
+                        }
+                    }
+                }
+            }
         }
 
         Rectangle {
@@ -33,17 +128,28 @@ Rectangle {
                     model: backend.taskFilters
                     delegate: Item {
                         height: 44
-                        implicitWidth: tabLbl.implicitWidth + 32
+                        implicitWidth: tabLbl.implicitWidth + countLbl.implicitWidth + 40
 
                         Rectangle { visible: modelData.active; anchors.bottom: parent.bottom; width: parent.width; height: 2; color: "#3B82F6" }
 
-                        Text {
-                            id: tabLbl
+                        Row {
                             anchors.centerIn: parent
-                            text: modelData.label
-                            font.pixelSize: 12
-                            font.bold: modelData.active
-                            color: modelData.active ? "#3B82F6" : "#64748B"
+                            spacing: 6
+
+                            Text {
+                                id: tabLbl
+                                text: modelData.label
+                                font.pixelSize: 12
+                                font.bold: modelData.active
+                                color: modelData.active ? "#3B82F6" : "#64748B"
+                            }
+
+                            Text {
+                                id: countLbl
+                                text: "(" + modelData.count + ")"
+                                font.pixelSize: 11
+                                color: modelData.active ? "#3B82F6" : "#94A3B8"
+                            }
                         }
 
                         MouseArea {
@@ -55,19 +161,13 @@ Rectangle {
                 }
 
                 Item { Layout.fillWidth: true }
-
-                Rectangle {
-                    width: 130; height: 28; radius: 6
-                    color: "#F4F6FA"; border.color: "#E2E8F0"
+                Text {
+                    text: backend.inboxTasks.length + " tasks"
+                    font.pixelSize: 11
+                    color: "#64748B"
+                    Layout.rightMargin: 24
                     Layout.alignment: Qt.AlignVCenter
-                    RowLayout {
-                        anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
-                        Text { text: "All Subjects"; font.pixelSize: 11; color: "#64748B" }
-                        Item { Layout.fillWidth: true }
-                        Text { text: "v"; font.pixelSize: 10; color: "#94A3B8" }
-                    }
                 }
-                Item { width: 24 }
             }
         }
 
@@ -159,6 +259,33 @@ Rectangle {
                                 AppButton { label: "Review"; variant: "primary"; small: true; onClicked: backend.markTaskDone(modelData.id) }
                                 AppButton { label: "Skip"; variant: "secondary"; small: true; onClicked: backend.skipTask(modelData.id) }
                             }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    visible: backend.inboxTasks.length === 0
+                    Layout.fillWidth: true
+                    implicitHeight: 140
+                    color: "transparent"
+
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 6
+
+                        Text {
+                            text: "No tasks in this view"
+                            font.pixelSize: 14
+                            font.bold: true
+                            color: "#0F172A"
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+
+                        Text {
+                            text: "Add a task or switch filters to see the rest of your revision queue."
+                            font.pixelSize: 11
+                            color: "#64748B"
+                            horizontalAlignment: Text.AlignHCenter
                         }
                     }
                 }

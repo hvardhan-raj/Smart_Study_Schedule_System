@@ -62,7 +62,6 @@ class StudyFlowBackend(QObject):
 
         try:
             state = load_state(self._store_path, self._today)
-            self._user = state.get("user", {"name": "User", "plan": "Free"})
             self._settings = state.get("settings", {"notifications": True, "reminders": True, "auto_schedule": True})
             self._alert_settings = self._normalize_alert_settings(state.get("alert_settings", {}))
             self._reminder_preferences = self._normalize_reminder_preferences(state.get("reminder_preferences", {}))
@@ -83,7 +82,6 @@ class StudyFlowBackend(QObject):
             ]
         except Exception:
             # Fallback defaults if loading fails
-            self._user = {"name": "User", "plan": "Free"}
             self._settings = {"notifications": True, "reminders": True, "auto_schedule": True}
             self._alert_settings = self._normalize_alert_settings({})
             self._reminder_preferences = self._normalize_reminder_preferences({})
@@ -111,7 +109,6 @@ class StudyFlowBackend(QObject):
         save_state(
             self._store_path,
             {
-                "user": self._user,
                 "settings": self._settings,
                 "alert_settings": self._alert_settings,
                 "reminder_preferences": self._reminder_preferences,
@@ -327,18 +324,41 @@ class StudyFlowBackend(QObject):
                 self._tasks.append(self._build_task_for_topic(topic))
 
     def _build_task_for_topic(self, topic: dict[str, Any]) -> dict[str, Any]:
-        difficulty = topic["difficulty"]
-        delay_days = {"Easy": 1, "Medium": 0, "Hard": 0}.get(difficulty, 1)
-        review_hour = {"Easy": 15, "Medium": 11, "Hard": 9}.get(difficulty, 11)
+        return self._create_task(
+            topic_name=topic["name"],
+            subject=topic["subject"],
+            difficulty=topic["difficulty"],
+            confidence=int(topic["confidence"]),
+        )
+
+    def _create_task(
+        self,
+        *,
+        topic_name: str,
+        subject: str,
+        difficulty: str,
+        confidence: int,
+        offset_days: int | None = None,
+        scheduled_at: datetime | None = None,
+    ) -> dict[str, Any]:
+        normalized_difficulty = difficulty if difficulty in {"Easy", "Medium", "Hard"} else "Medium"
+        delay_days = {"Easy": 1, "Medium": 0, "Hard": 0}.get(normalized_difficulty, 1)
+        review_hour = {"Easy": 15, "Medium": 11, "Hard": 9}.get(normalized_difficulty, 11)
+        if scheduled_at is None:
+            due_offset = delay_days if offset_days is None else max(-30, min(offset_days, 365))
+            scheduled_at = datetime.combine(
+                self._today + timedelta(days=due_offset),
+                datetime.min.time(),
+            ).replace(hour=review_hour)
         return {
             "id": f"task-{uuid4().hex[:8]}",
-            "topic": topic["name"],
-            "subject": topic["subject"],
-            "difficulty": difficulty,
-            "scheduled_at": datetime.combine(self._today + timedelta(days=delay_days), datetime.min.time()).replace(hour=review_hour),
-            "confidence": topic["confidence"],
+            "topic": topic_name,
+            "subject": subject,
+            "difficulty": normalized_difficulty,
+            "scheduled_at": scheduled_at,
+            "confidence": max(1, min(int(confidence), CONFIDENCE_MAX)),
             "status": "pending",
-            "duration_minutes": {"Easy": 15, "Medium": 25, "Hard": 35}[difficulty],
+            "duration_minutes": {"Easy": 15, "Medium": 25, "Hard": 35}[normalized_difficulty],
             "completed_at": None,
             "completed": False,
         }
@@ -354,6 +374,39 @@ class StudyFlowBackend(QObject):
 
     def _find_topic_by_id(self, topic_id: str) -> dict[str, Any] | None:
         return next((topic for topic in self._topics if topic["id"] == topic_id), None)
+
+    def _ensure_topic_for_task(self, topic_name: str, subject: str, difficulty: str) -> None:
+        if self._find_topic(topic_name) is not None:
+            return
+        self._topics.append(
+            self._normalize_topic(
+                {
+                    "id": f"topic-{uuid4().hex[:8]}",
+                    "name": topic_name,
+                    "subject": subject,
+                    "difficulty": difficulty,
+                    "progress": 0,
+                    "confidence": 3,
+                    "notes": "",
+                }
+            )
+        )
+
+    def _inbox_tasks(self) -> list[dict[str, Any]]:
+        tasks = list(self._tasks)
+        if self._task_filter == "pending":
+            tasks = [task for task in tasks if not self._is_task_completed(task)]
+        elif self._task_filter != "all":
+            tasks = [task for task in tasks if self._task_bucket(task) == self._task_filter]
+        tasks.sort(
+            key=lambda task: (
+                self._is_task_completed(task),
+                -self._compute_urgency_score(task),
+                task["scheduled_at"],
+                task["topic"].lower(),
+            )
+        )
+        return [self._task_payload(task) for task in tasks]
 
     def _subjects_from_topics(self) -> list[str]:
         return sorted(set(SUBJECTS.keys()) | {topic["subject"] for topic in self._topics})
@@ -529,10 +582,6 @@ class StudyFlowBackend(QObject):
                 read=True,
             )
 
-    @Property("QVariantMap", notify=stateChanged)
-    def userProfile(self) -> dict[str, Any]:
-        return self._user
-
     @Property("QVariantList", notify=stateChanged)
     def dashboardStats(self) -> list[dict[str, Any]]:
         completed_today = len(
@@ -642,6 +691,38 @@ class StudyFlowBackend(QObject):
         if self._task_filter != "all":
             tasks = [task for task in tasks if self._task_bucket(task) == self._task_filter]
         return [self._task_payload(task) for task in tasks]
+
+    @Property("QVariantList", notify=stateChanged)
+    def inboxTasks(self) -> list[dict[str, Any]]:
+        return self._inbox_tasks()
+
+    @Property("QVariantList", notify=stateChanged)
+    def taskFilters(self) -> list[dict[str, Any]]:
+        items = [
+            ("all", "All"),
+            ("pending", "Pending"),
+            ("overdue", "Overdue"),
+            ("due_today", "Due Today"),
+            ("upcoming", "Upcoming"),
+            ("completed", "Completed"),
+        ]
+        return [
+            {
+                "key": key,
+                "label": label,
+                "active": self._task_filter == key,
+                "count": len(
+                    [
+                        task
+                        for task in self._tasks
+                        if key == "all"
+                        or (key == "pending" and not self._is_task_completed(task))
+                        or (key not in {"all", "pending"} and self._task_bucket(task) == key)
+                    ]
+                ),
+            }
+            for key, label in items
+        ]
 
     @Property("QVariantList", notify=stateChanged)
     def curriculumSubjects(self) -> list[dict[str, Any]]:
@@ -971,13 +1052,6 @@ class StudyFlowBackend(QObject):
     def settingsColumns(self) -> list[dict[str, Any]]:
         return [
             {
-                "title": "Account",
-                "rows": [
-                    {"label": "Plan", "value": self._user.get("plan", "Free"), "kind": "value"},
-                    {"label": "Name", "value": self._user.get("name", "User"), "kind": "value"},
-                ],
-            },
-            {
                 "title": "Notifications",
                 "rows": [
                     {
@@ -1169,8 +1243,76 @@ class StudyFlowBackend(QObject):
             task["completed_at"] = datetime.now()
             self._study_minutes.append(task["duration_minutes"])
             self._study_minutes = self._study_minutes[-14:]
+            topic = self._find_topic(task["topic"])
+            if topic is not None:
+                topic["progress"] = min(100, topic["progress"] + 5)
+                topic["confidence"] = max(topic["confidence"], min(CONFIDENCE_MAX, int(task["confidence"])))
             self._save()
             self._emit()
+
+    @Slot(str, str, str, str)
+    def addTask(self, topic_name: str, subject: str, difficulty: str, schedule_key: str) -> None:
+        clean_name = topic_name.strip()
+        clean_subject = subject.strip() or "General"
+        clean_difficulty = difficulty if difficulty in {"Easy", "Medium", "Hard"} else "Medium"
+        if not clean_name:
+            return
+
+        schedule_offsets = {
+            "overdue": -1,
+            "today": 0,
+            "tomorrow": 1,
+            "this_week": 3,
+        }
+        offset_days = schedule_offsets.get(schedule_key, 0)
+        self._ensure_topic_for_task(clean_name, clean_subject, clean_difficulty)
+        topic = self._find_topic(clean_name)
+        confidence = int(topic["confidence"]) if topic is not None else 3
+        self._tasks.append(
+            self._create_task(
+                topic_name=clean_name,
+                subject=clean_subject,
+                difficulty=clean_difficulty,
+                confidence=confidence,
+                offset_days=offset_days,
+            )
+        )
+        self._save()
+        self._emit()
+        self._add_notification(
+            "Task Added",
+            f"{clean_name} was scheduled for {schedule_key.replace('_', ' ')}.",
+            "+",
+            "#3B82F6",
+        )
+
+    @Slot(str)
+    def skipTask(self, task_id: str) -> None:
+        task = self._find_task(task_id)
+        if task is None or self._is_task_completed(task):
+            return
+        task["scheduled_at"] = task["scheduled_at"] + timedelta(days=1)
+        task["status"] = "pending"
+        self._save()
+        self._emit()
+
+    @Slot()
+    def markAllTasksDone(self) -> None:
+        changed = False
+        visible_ids = {item["id"] for item in self._inbox_tasks()}
+        for task in self._tasks:
+            if task["id"] not in visible_ids or self._is_task_completed(task):
+                continue
+            task["completed"] = True
+            task["status"] = "completed"
+            task["completed_at"] = datetime.now()
+            self._study_minutes.append(task["duration_minutes"])
+            changed = True
+        if not changed:
+            return
+        self._study_minutes = self._study_minutes[-14:]
+        self._save()
+        self._emit()
 
     @Slot()
     def startSession(self) -> None:
@@ -1442,12 +1584,6 @@ class StudyFlowBackend(QObject):
             self._emit()
         except ValueError:
             pass  # Ignore invalid dates
-
-    @Slot(str)
-    def updateUserName(self, name: str) -> None:
-        self._user["name"] = name
-        self._save()
-        self._emit()
 
     @Slot()
     def clearNotifications(self) -> None:

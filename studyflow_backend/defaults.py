@@ -38,16 +38,6 @@ TOPIC_LIBRARY: list[dict[str, Any]] = [
     {"subject": "History", "name": "Cold War", "difficulty": "Medium", "progress": 62, "confidence": 3},
 ]
 
-
-def default_user() -> dict[str, Any]:
-    return {
-        "name": "Alex Johnson",
-        "email": "alex@studyflow.app",
-        "plan": "Premium",
-        "title": "Premium Student",
-    }
-
-
 def default_settings() -> dict[str, Any]:
     return {
         "scheduling": {
