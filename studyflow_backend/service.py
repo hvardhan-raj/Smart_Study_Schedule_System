@@ -951,6 +951,131 @@ class StudyFlowBackend(QObject):
     def curriculumSubjectOptions(self) -> list[str]:
         return self._subjects_from_topics()
 
+    @Slot(str)
+    def setCurriculumSearch(self, text: str) -> None:
+        if self._curriculum_search != text:
+            self._curriculum_search = text
+            self._emit()
+
+    @Slot(str)
+    def setCurriculumDifficulty(self, difficulty: str) -> None:
+        value = difficulty if difficulty in {"All", "Easy", "Medium", "Hard"} else "All"
+        if self._curriculum_filter != value:
+            self._curriculum_filter = value
+            self._emit()
+
+    @Slot(str, str)
+    def addSubject(self, name: str, color: str) -> None:
+        clean_name = name.strip()
+        if not clean_name:
+            return
+        clean_color = color.strip() or "#3B82F6"
+        if clean_name not in SUBJECTS:
+            SUBJECTS[clean_name] = SubjectMeta(clean_name[:3].upper(), clean_color)
+        self._save()
+        self._emit()
+
+    @Slot(str, str, str, str, str, str)
+    def upsertTopic(
+        self,
+        topic_id: str,
+        name: str,
+        subject: str,
+        difficulty: str,
+        parent_id: str,
+        notes: str,
+    ) -> None:
+        clean_name = name.strip()
+        if not clean_name:
+            return
+        clean_subject = subject.strip() or "General"
+        clean_difficulty = difficulty if difficulty in {"Easy", "Medium", "Hard"} else "Medium"
+        clean_parent = parent_id.strip() or None
+
+        if topic_id:
+            existing = self._find_topic_by_id(topic_id)
+            if existing is not None:
+                existing["name"] = clean_name
+                existing["subject"] = clean_subject
+                existing["difficulty"] = clean_difficulty
+                existing["parent_topic_id"] = clean_parent
+                existing["notes"] = notes
+                self._save()
+                self._emit()
+                return
+
+        new_topic = self._normalize_topic(
+            {
+                "name": clean_name,
+                "subject": clean_subject,
+                "difficulty": clean_difficulty,
+                "parent_topic_id": clean_parent,
+                "notes": notes,
+                "progress": 0,
+                "confidence": 3,
+            }
+        )
+        self._topics.append(new_topic)
+        self._rebuild_missing_tasks()
+        self._save()
+        self._emit()
+        self._add_notification(
+            "Topic Added",
+            f'"{clean_name}" was added under {clean_subject}.',
+            "+",
+            self._subject_meta(clean_subject).color,
+        )
+
+    @Slot(str, str, bool)
+    def importTopics(self, text: str, subject: str, csv_mode: bool) -> None:
+        clean_subject = subject.strip() or "General"
+        lines: list[str] = []
+        if csv_mode:
+            reader = csv.reader(StringIO(text))
+            for row in reader:
+                if row:
+                    lines.append(row[0].strip())
+        else:
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
+
+        added = 0
+        for topic_name in lines:
+            if not topic_name or self._find_topic(topic_name) is not None:
+                continue
+            self._topics.append(
+                self._normalize_topic(
+                    {
+                        "name": topic_name,
+                        "subject": clean_subject,
+                        "difficulty": "Medium",
+                        "progress": 0,
+                        "confidence": 3,
+                    }
+                )
+            )
+            added += 1
+
+        if added:
+            self._rebuild_missing_tasks()
+            self._save()
+            self._emit()
+            self._add_notification(
+                "Bulk Import",
+                f"{added} topic{'s' if added != 1 else ''} imported under {clean_subject}.",
+                "+",
+                self._subject_meta(clean_subject).color,
+            )
+
+    @Slot(str, result="QVariantMap")
+    def suggestTopicDifficulty(self, topic_name: str) -> dict[str, Any]:
+        prediction = self._nlp_service.predict_difficulty(topic_name)
+        if prediction.difficulty is None:
+            return {"difficulty": "", "confidence": 0.0}
+        return {
+            "difficulty": prediction.difficulty.value,
+            "confidence": round(prediction.confidence, 2),
+        }
+
     @Property("QVariantList", notify=stateChanged)
     def intelligenceStats(self) -> list[dict[str, Any]]:
         completed = len(self._completed_tasks())
