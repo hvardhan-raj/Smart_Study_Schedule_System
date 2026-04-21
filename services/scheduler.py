@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, time
-from math import ceil
+from math import ceil, exp, log
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -43,6 +43,9 @@ INITIAL_INTERVAL_BY_DIFFICULTY: dict[str, int] = {
     "hard": 1,
 }
 MAX_INTERVAL_DAYS = 365
+MIN_STABILITY = 0.35
+TARGET_RETENTION = 0.7
+RECENT_FAILURE_LOOKBACK = 3
 
 
 @dataclass(frozen=True)
@@ -71,18 +74,20 @@ class SchedulerService:
         stmt = (
             select(Revision)
             .where(Revision.is_completed.is_(False), Revision.scheduled_date == current_date)
-            .order_by(Revision.scheduled_date, Revision.created_at)
         )
-        return list(self.session.scalars(stmt))
+        revisions = list(self.session.scalars(stmt))
+        revisions.sort(key=lambda revision: self._priority_sort_key(revision, current_date))
+        return revisions
 
     def get_overdue(self, *, for_date: date | None = None) -> list[Revision]:
         current_date = for_date or self._today()
         stmt = (
             select(Revision)
             .where(Revision.is_completed.is_(False), Revision.scheduled_date < current_date)
-            .order_by(Revision.scheduled_date, Revision.created_at)
         )
-        return list(self.session.scalars(stmt))
+        revisions = list(self.session.scalars(stmt))
+        revisions.sort(key=lambda revision: self._priority_sort_key(revision, current_date))
+        return revisions
 
     def schedule_new_topic(self, topic_id: str, *, scheduled_for: date | None = None) -> Revision:
         topic = self._require_topic(topic_id)
@@ -124,6 +129,10 @@ class SchedulerService:
         review_day = finished_at.date()
 
         days_since_last_review = self._days_since_last_review(topic, review_day)
+        retrievability = self._retrievability(
+            stability=topic.fsrs_stability or INITIAL_STABILITY_BY_DIFFICULTY[topic.difficulty.value],
+            days_since_last_review=days_since_last_review,
+        )
         snapshot = self._next_fsrs_snapshot(
             topic=topic,
             rating=rating,
@@ -151,6 +160,11 @@ class SchedulerService:
             features=personal_features,
         )
         chosen_interval = personalized_interval or snapshot.next_interval_days
+        chosen_interval = self._apply_context_interval_adjustment(
+            topic=topic,
+            review_day=review_day,
+            candidate_interval=chosen_interval,
+        )
         revision.interval_days_after = chosen_interval
         revision.fsrs_interval_days = snapshot.next_interval_days
         revision.personalized_interval_days = personalized_interval
@@ -172,7 +186,7 @@ class SchedulerService:
                 hour_of_day=finished_at.hour,
                 day_of_week=finished_at.weekday(),
                 confidence_rating=rating,
-                predicted_confidence=RATING_TO_SCORE[rating] / 4,
+                predicted_confidence=round(retrievability, 4),
                 scheduler_source="personalized" if personalized_interval is not None else "fsrs",
             )
         )
@@ -221,7 +235,7 @@ class SchedulerService:
                 hour_of_day=None,
                 day_of_week=current_date.weekday(),
                 confidence_rating=ConfidenceRating.AGAIN,
-                predicted_confidence=0.25,
+                predicted_confidence=round(self._retrievability(penalized_stability, overdue_days), 4),
                 scheduler_source="missed_review",
             )
         )
@@ -238,17 +252,111 @@ class SchedulerService:
     ) -> FsrsSnapshot:
         current_stability = topic.fsrs_stability or INITIAL_STABILITY_BY_DIFFICULTY[topic.difficulty.value]
         current_difficulty = topic.fsrs_difficulty or self._normalize_difficulty(topic)
+        retrievability = self._retrievability(
+            stability=current_stability,
+            days_since_last_review=days_since_last_review,
+        )
+
+        if rating == ConfidenceRating.AGAIN:
+            stability = max(INITIAL_STABILITY_BY_DIFFICULTY[topic.difficulty.value] * 0.9, MIN_STABILITY)
+            difficulty = min(max(current_difficulty + 0.18, 0.1), 0.95)
+            interval = 1
+            return FsrsSnapshot(
+                stability=round(stability, 3),
+                difficulty=round(difficulty, 3),
+                next_interval_days=interval,
+            )
 
         overdue_penalty = max(0.55, 1 - scheduled_days_overdue * 0.08)
-        retrievability_bonus = 1 + min(days_since_last_review, 10) * 0.03
+        recall_headroom = 1 + max(0.0, 1 - retrievability) * 0.65
         stability = max(
-            current_stability * RATING_TO_STABILITY_FACTOR[rating] * overdue_penalty * retrievability_bonus,
-            0.35,
+            current_stability * RATING_TO_STABILITY_FACTOR[rating] * overdue_penalty * recall_headroom,
+            MIN_STABILITY,
         )
         difficulty = min(max(current_difficulty + RATING_TO_DIFFICULTY_DELTA[rating], 0.1), 0.95)
 
-        interval = min(MAX_INTERVAL_DAYS, max(1, ceil(stability * (1.4 - difficulty))))
+        base_interval = self._stability_to_interval(stability)
+        interval = min(MAX_INTERVAL_DAYS, max(1, round(base_interval * (1.02 - difficulty * 0.18))))
         return FsrsSnapshot(stability=round(stability, 3), difficulty=round(difficulty, 3), next_interval_days=interval)
+
+    def _retrievability(self, stability: float, days_since_last_review: int) -> float:
+        safe_stability = max(stability, MIN_STABILITY)
+        return exp(-max(days_since_last_review, 0) / safe_stability)
+
+    def _stability_to_interval(self, stability: float) -> int:
+        safe_stability = max(stability, MIN_STABILITY)
+        return max(1, min(MAX_INTERVAL_DAYS, ceil(-safe_stability * log(TARGET_RETENTION))))
+
+    def _apply_context_interval_adjustment(
+        self,
+        *,
+        topic: Topic,
+        review_day: date,
+        candidate_interval: int,
+    ) -> int:
+        multiplier = 1.0
+        exam_distance = self._days_until_exam(topic, review_day)
+        if exam_distance is not None:
+            if exam_distance <= 7:
+                multiplier *= 0.6
+            elif exam_distance <= 14:
+                multiplier *= 0.78
+            elif exam_distance <= 30:
+                multiplier *= 0.9
+        if topic.difficulty_score >= 0.75 or (topic.fsrs_difficulty or 0) >= 0.7:
+            multiplier *= 0.85
+        if self._has_recent_failure(topic.id):
+            multiplier *= 0.75
+        return max(1, min(MAX_INTERVAL_DAYS, round(candidate_interval * multiplier)))
+
+    def _context_priority_boost(self, revision: Revision, current_date: date) -> float:
+        topic = revision.topic
+        overdue_days = max((current_date - revision.scheduled_date).days, 0)
+        boost = overdue_days * 25
+        exam_distance = self._days_until_exam(topic, current_date)
+        if exam_distance is not None:
+            if exam_distance <= 7:
+                boost += 80
+            elif exam_distance <= 14:
+                boost += 50
+            elif exam_distance <= 30:
+                boost += 20
+        boost += max(0.0, topic.difficulty_score - 0.5) * 40
+        boost += max(0.0, (topic.fsrs_difficulty or 0.5) - 0.5) * 35
+        if self._has_recent_failure(topic.id):
+            boost += 65
+        return boost
+
+    def _priority_sort_key(self, revision: Revision, current_date: date) -> tuple[float, date, datetime]:
+        return (
+            -self._context_priority_boost(revision, current_date),
+            revision.scheduled_date,
+            revision.created_at,
+        )
+
+    def _days_until_exam(self, topic: Topic, current_date: date) -> int | None:
+        exam_date = topic.exam_date or topic.subject.exam_date
+        if exam_date is None:
+            return None
+        return max((exam_date - current_date).days, 0)
+
+    def _has_recent_failure(self, topic_id: str) -> bool:
+        stmt = (
+            select(PerformanceLog.confidence_rating)
+            .where(PerformanceLog.topic_id == topic_id)
+            .order_by(PerformanceLog.created_at.desc())
+            .limit(RECENT_FAILURE_LOOKBACK)
+        )
+        recent_ratings = list(self.session.scalars(stmt))
+        if any(rating == ConfidenceRating.AGAIN for rating in recent_ratings):
+            return True
+        missed_stmt = (
+            select(Revision.is_missed)
+            .where(Revision.topic_id == topic_id)
+            .order_by(Revision.created_at.desc())
+            .limit(RECENT_FAILURE_LOOKBACK)
+        )
+        return any(bool(flag) for flag in self.session.scalars(missed_stmt))
 
     def _normalize_difficulty(self, topic: Topic) -> float:
         if topic.fsrs_difficulty is not None:
