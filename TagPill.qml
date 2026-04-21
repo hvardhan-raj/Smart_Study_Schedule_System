@@ -8,11 +8,11 @@ Rectangle {
     property bool   outlined: false
 
     implicitWidth:  label.implicitWidth + 16
-    implicitHeight: 20
-    radius:         10
+    implicitHeight: 22
+    radius:         11
 
-    color:  root.outlined ? "transparent" : Qt.rgba(root.tagColor.r, root.tagColor.g, root.tagColor.b, 0.12)
-    border.color: root.outlined ? root.tagColor : "transparent"
+    color:        root.outlined ? "transparent" : Qt.rgba(root.tagColor.r, root.tagColor.g, root.tagColor.b, 0.10)
+    border.color: root.outlined ? Qt.rgba(root.tagColor.r, root.tagColor.g, root.tagColor.b, 0.55) : "transparent"
     border.width: root.outlined ? 1 : 0
 
     Text {
@@ -21,6 +21,7 @@ Rectangle {
         text:  root.tagText
         font.pixelSize: 10
         font.bold: true
+        font.family: "Segoe UI"
         color: root.tagColor
     }
 }

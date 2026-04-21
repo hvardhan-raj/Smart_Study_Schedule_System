@@ -4,7 +4,7 @@ import QtQuick.Controls 2.15
 
 Rectangle {
     id: root
-    color: "#F4F6FA"
+    color: "#F0F4F9"
 
     ColumnLayout {
         anchors.fill: parent
@@ -15,7 +15,12 @@ Rectangle {
             pageTitle: "Dashboard"
             pageSubtitle: "DAILY REVISION BOARD"
             rightContent: [
-                AppButton { label: "+ Start Session"; variant: "primary"; small: true; onClicked: backend.startSession() }
+                AppButton {
+                    label: "+ Start Session"
+                    variant: "primary"
+                    small: true
+                    onClicked: backend.startSession()
+                }
             ]
         }
 
@@ -27,29 +32,29 @@ Rectangle {
 
             ColumnLayout {
                 width: parent.width
-                spacing: 18
+                spacing: 20
 
+                // ── Banner ─────────────────────────────────────────────
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.leftMargin: 24
                     Layout.rightMargin: 24
-                    implicitHeight: 70
-                    radius: 18
+                    Layout.topMargin: 20
+                    implicitHeight: 68
+                    radius: 16
                     gradient: Gradient {
-                        GradientStop { position: 0.0; color: "#0F4C81" }
-                        GradientStop { position: 1.0; color: "#2563EB" }
+                        GradientStop { position: 0.0; color: "#0F3D6E" }
+                        GradientStop { position: 1.0; color: "#1D66BE" }
                     }
 
                     RowLayout {
-                        anchors { fill: parent; leftMargin: 28; rightMargin: 28 }
+                        anchors { fill: parent; leftMargin: 24; rightMargin: 24 }
                         spacing: 14
 
                         Rectangle {
-                            width: 34
-                            height: 34
+                            width: 36; height: 36
                             radius: 10
-                            color: Qt.rgba(1, 1, 1, 0.16)
-
+                            color: Qt.rgba(1, 1, 1, 0.14)
                             Text {
                                 anchors.centerIn: parent
                                 text: backend.dashboardBanner.emoji
@@ -59,19 +64,19 @@ Rectangle {
                         }
 
                         ColumnLayout {
-                            spacing: 2
-
+                            spacing: 3
                             Text {
                                 text: backend.dashboardBanner.headline
                                 font.pixelSize: 14
                                 font.bold: true
+                                font.family: "Segoe UI"
                                 color: "white"
                             }
-
                             Text {
                                 text: backend.dashboardBanner.detail
                                 font.pixelSize: 11
-                                color: "#BFDBFE"
+                                font.family: "Segoe UI"
+                                color: "#93C5FD"
                             }
                         }
 
@@ -79,8 +84,10 @@ Rectangle {
 
                         Rectangle {
                             radius: 12
-                            color: Qt.rgba(255, 255, 255, 0.12)
-                            implicitWidth: focusLabel.implicitWidth + 18
+                            color: Qt.rgba(1, 1, 1, 0.10)
+                            border.color: Qt.rgba(1, 1, 1, 0.18)
+                            border.width: 1
+                            implicitWidth: focusLabel.implicitWidth + 20
                             implicitHeight: 30
 
                             Text {
@@ -89,32 +96,36 @@ Rectangle {
                                 text: "Focus score " + backend.dashboardFocus.score + "%"
                                 font.pixelSize: 11
                                 font.bold: true
+                                font.family: "Segoe UI"
                                 color: "white"
                             }
                         }
                     }
                 }
 
+                // ── Stat cards ────────────────────────────────────────
                 RowLayout {
                     Layout.fillWidth: true
-                    Layout.margins: 24
+                    Layout.leftMargin: 24
+                    Layout.rightMargin: 24
                     spacing: 14
 
                     Repeater {
                         model: backend.dashboardStats
                         delegate: StatCard {
                             Layout.fillWidth: true
-                            cardTitle: modelData.title
-                            value: modelData.value
-                            subtitle: modelData.subtitle
-                            trend: modelData.trend
-                            trendUp: modelData.trendUp
-                            valueColor: modelData.valueColor
+                            cardTitle:   modelData.title
+                            value:       modelData.value
+                            subtitle:    modelData.subtitle
+                            trend:       modelData.trend
+                            trendUp:     modelData.trendUp
+                            valueColor:  modelData.valueColor
                             accentColor: modelData.accentColor
                         }
                     }
                 }
 
+                // ── Kanban columns ────────────────────────────────────
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.leftMargin: 24
@@ -125,43 +136,51 @@ Rectangle {
                     Repeater {
                         model: backend.dashboardColumns
                         delegate: Rectangle {
-                            property var columnData: modelData
+                            property var col: modelData
+
                             Layout.fillWidth: true
                             Layout.preferredWidth: 1
-                            radius: 18
+                            radius: 16
                             color: "#FFFFFF"
                             border.width: 1
-                            border.color: Qt.rgba(columnData.accentColor.r, columnData.accentColor.g, columnData.accentColor.b, 0.18)
-                            implicitHeight: 560
+                            border.color: "#EEF2F8"
+                            implicitHeight: 540
+
+                            // Accent top strip
+                            Rectangle {
+                                anchors { top: parent.top; left: parent.left; right: parent.right }
+                                height: 3
+                                radius: 16
+                                color: col.accentColor
+                            }
 
                             ColumnLayout {
-                                anchors { fill: parent; margins: 18 }
-                                spacing: 14
+                                anchors { fill: parent; margins: 16; topMargin: 18 }
+                                spacing: 12
 
+                                // Column header
                                 RowLayout {
                                     Layout.fillWidth: true
                                     spacing: 8
 
                                     Rectangle {
-                                        width: 10
-                                        height: 10
-                                        radius: 5
-                                        color: columnData.accentColor
+                                        width: 10; height: 10; radius: 5
+                                        color: col.accentColor
                                     }
 
                                     ColumnLayout {
                                         spacing: 2
-
                                         Text {
-                                            text: columnData.title
-                                            font.pixelSize: 15
+                                            text: col.title
+                                            font.pixelSize: 14
                                             font.bold: true
-                                            color: "#1A2332"
+                                            font.family: "Segoe UI"
+                                            color: "#0F172A"
                                         }
-
                                         Text {
-                                            text: columnData.subtitle
+                                            text: col.subtitle
                                             font.pixelSize: 10
+                                            font.family: "Segoe UI"
                                             color: "#94A3B8"
                                         }
                                     }
@@ -169,11 +188,12 @@ Rectangle {
                                     Item { Layout.fillWidth: true }
 
                                     TagPill {
-                                        tagText: columnData.count + " items"
-                                        tagColor: columnData.accentColor
+                                        tagText:  col.count + " items"
+                                        tagColor: col.accentColor
                                     }
                                 }
 
+                                // Task list
                                 ScrollView {
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
@@ -185,40 +205,44 @@ Rectangle {
                                         spacing: 10
 
                                         Repeater {
-                                            model: columnData.items
+                                            model: col.items
                                             delegate: DashboardTaskCard {
                                                 Layout.fillWidth: true
-                                                taskData: modelData
-                                                accentColor: columnData.accentColor
+                                                taskData:    modelData
+                                                accentColor: col.accentColor
                                             }
                                         }
 
+                                        // Empty state
                                         Item {
-                                            visible: columnData.items.length === 0
+                                            visible: col.items.length === 0
                                             Layout.fillWidth: true
-                                            implicitHeight: 180
+                                            implicitHeight: 160
 
                                             ColumnLayout {
                                                 anchors.centerIn: parent
                                                 spacing: 6
 
                                                 Text {
-                                                    text: columnData.key === "upcoming" ? "No upcoming tasks yet" : "All clear"
+                                                    text: col.key === "upcoming" ? "No upcoming tasks" : "All clear ✓"
                                                     font.pixelSize: 13
                                                     font.bold: true
-                                                    color: "#1A2332"
+                                                    font.family: "Segoe UI"
+                                                    color: "#64748B"
                                                     Layout.alignment: Qt.AlignHCenter
                                                 }
 
                                                 Text {
-                                                    text: columnData.key === "upcoming"
-                                                        ? "New revisions will appear here as the schedule fills out."
-                                                        : "Nothing waiting in this column right now."
+                                                    text: col.key === "upcoming"
+                                                        ? "New revisions will appear as the schedule fills out."
+                                                        : "Nothing pending in this column right now."
                                                     font.pixelSize: 10
+                                                    font.family: "Segoe UI"
                                                     color: "#94A3B8"
                                                     horizontalAlignment: Text.AlignHCenter
                                                     wrapMode: Text.WordWrap
                                                     Layout.alignment: Qt.AlignHCenter
+                                                    Layout.maximumWidth: 180
                                                 }
                                             }
                                         }

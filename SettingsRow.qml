@@ -17,7 +17,7 @@ Item {
     signal dangerClicked()
 
     Layout.fillWidth: true
-    height: 44
+    height: 46
 
     ColumnLayout {
         anchors.fill: parent
@@ -32,11 +32,12 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 8
+            spacing: 10
 
             Text {
                 text: root.label
                 font.pixelSize: 12
+                font.family: "Segoe UI"
                 color: "#374151"
                 Layout.fillWidth: true
             }
@@ -44,20 +45,19 @@ Item {
             // Danger button
             Rectangle {
                 visible: root.isDanger
-                implicitWidth:  dangerLbl.implicitWidth + 24
+                implicitWidth:  dangerLbl.implicitWidth + 22
                 implicitHeight: 28
                 radius: 14
                 color: "#EF4444"
-
                 Text {
                     id: dangerLbl
                     anchors.centerIn: parent
                     text: root.dangerLabel
                     font.pixelSize: 11
                     font.bold: true
+                    font.family: "Segoe UI"
                     color: "#FFFFFF"
                 }
-
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
@@ -70,28 +70,26 @@ Item {
                 visible: !root.isToggle && !root.isDanger
                 text:    root.value
                 font.pixelSize: 12
+                font.family: "Segoe UI"
                 color:   root.valueColor
             }
 
             // Toggle switch
             Rectangle {
                 visible: root.isToggle
-                width: 38
-                height: 20
-                radius: 10
-                color: root.toggleOn ? "#3B82F6" : "#CBD5E1"
+                width: 40
+                height: 22
+                radius: 11
+                color: root.toggleOn ? "#3B82F6" : "#D1D9E6"
+                Behavior on color { ColorAnimation { duration: 160 } }
 
                 Rectangle {
-                    width: 16
-                    height: 16
-                    radius: 8
+                    width: 18; height: 18
+                    radius: 9
                     color: "#FFFFFF"
                     anchors.verticalCenter: parent.verticalCenter
                     x: root.toggleOn ? parent.width - width - 2 : 2
-
-                    Behavior on x {
-                        NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
-                    }
+                    Behavior on x { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
                 }
 
                 MouseArea {

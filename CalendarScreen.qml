@@ -193,7 +193,7 @@ Rectangle {
                                         anchors.fill: parent
                                         enabled: modelData.isValid
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: backend.selectCalendarDay(modelData.dayNum)
+                                        onClicked: backend.selectCalendarDay(modelData.dateStr)
                                     }
                                 }
                             }

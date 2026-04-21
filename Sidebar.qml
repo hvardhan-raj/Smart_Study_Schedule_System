@@ -2,44 +2,38 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
-// ─────────────────────────────────────────────────────────────────
-//  Sidebar  –  left navigation panel, matches the prototype exactly
-// ─────────────────────────────────────────────────────────────────
 Rectangle {
     id: root
-    width:  232
-    color:  "#182433"
+    width: 220
+    color: "#111827"
 
-    // Which page is active? 0=Dashboard 1=Tasks 2=Curriculum
-    // 3=Schedule 4=Calendar 5=Intelligence 6=Notifications 7=Settings
     property int  activePage: 0
-    property var pages: []
+    property var  pages: []
     signal pageSelected(int index)
 
-    // ── logo / app name ──────────────────────────────────────
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
 
-        Item { height: 24 }
+        // ── Logo ──────────────────────────────────────────────────────
+        Item { height: 22 }
 
-        // App icon + name
         RowLayout {
-            Layout.leftMargin: 18
-            spacing: 10
+            Layout.leftMargin: 20
+            Layout.rightMargin: 20
+            spacing: 11
 
             Rectangle {
-                width: 34; height: 34
-                radius: 10
+                width: 36; height: 36
+                radius: 11
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: "#0EA5E9" }
-                    GradientStop { position: 1.0; color: "#2563EB" }
+                    GradientStop { position: 0.0; color: "#3B82F6" }
+                    GradientStop { position: 1.0; color: "#1D4ED8" }
                 }
-
                 Text {
                     anchors.centerIn: parent
                     text: "S"
-                    font.pixelSize: 16
+                    font.pixelSize: 17
                     font.bold: true
                     color: "white"
                 }
@@ -52,32 +46,35 @@ Rectangle {
                     font.pixelSize: 14
                     font.bold: true
                     color: "#FFFFFF"
+                    font.family: "Segoe UI"
                 }
                 Text {
                     text: "Smart Study Schedule"
                     font.pixelSize: 9
-                    color: "#93A8BE"
+                    color: "#6B7C94"
+                    font.family: "Segoe UI"
                 }
             }
         }
 
         Item { height: 28 }
 
-        // ── section label ─────────────────────────────────────
+        // ── Nav label ────────────────────────────────────────────────
         Text {
-            Layout.leftMargin: 18
+            Layout.leftMargin: 20
             text: "NAVIGATION"
             font.pixelSize: 9
-            font.letterSpacing: 1.5
-            color: "#506783"
+            font.letterSpacing: 1.8
+            font.bold: true
+            color: "#4B5E73"
+            font.family: "Segoe UI"
         }
 
-        Item { height: 8 }
+        Item { height: 6 }
 
-        // ── nav items ─────────────────────────────────────────
+        // ── Nav items ────────────────────────────────────────────────
         Repeater {
-            model: root.pages.length > 0 ? root.pages.slice(0, 7) : []
-
+            model: root.pages.length > 0 ? root.pages.slice(0, 8) : []
             delegate: SidebarItem {
                 label:    modelData.label
                 icon:     modelData.icon
@@ -88,47 +85,78 @@ Rectangle {
 
         Item { Layout.fillHeight: true }
 
-        // ── bottom section ────────────────────────────────────
+        // ── Divider ──────────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
+            Layout.leftMargin: 20
+            Layout.rightMargin: 20
             height: 1
-            color: "#2D3F54"
-            Layout.leftMargin: 18
-            Layout.rightMargin: 18
+            color: "#1F2F40"
         }
 
-        Item { height: 12 }
+        Item { height: 14 }
 
-        SidebarItem {
-            label:  root.pages.length > 7 ? root.pages[7].label : "Settings"
-            icon:   root.pages.length > 7 ? root.pages[7].icon : "⚙"
-            active: (root.activePage === 7)
-            onClicked: root.pageSelected(7)
-        }
-
-        // User avatar row
+        // ── User row ─────────────────────────────────────────────────
         RowLayout {
-            Layout.leftMargin: 14
-            Layout.rightMargin: 14
-            Layout.bottomMargin: 20
+            Layout.leftMargin: 16
+            Layout.rightMargin: 16
+            Layout.bottomMargin: 18
             spacing: 10
 
             Rectangle {
-                width: 32; height: 32; radius: 16
+                width: 34; height: 34; radius: 17
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: "#38BDF8" }
-                    GradientStop { position: 1.0; color: "#2563EB" }
+                    GradientStop { position: 0.0; color: "#3B82F6" }
+                    GradientStop { position: 1.0; color: "#1D4ED8" }
                 }
-                Text { anchors.centerIn: parent; text: "A"; color: "white"; font.pixelSize: 13; font.bold: true }
+                Text {
+                    anchors.centerIn: parent
+                    text: {
+                        var name = backend.userProfile.name || "U"
+                        return name.charAt(0).toUpperCase()
+                    }
+                    color: "white"
+                    font.pixelSize: 14
+                    font.bold: true
+                }
             }
 
             ColumnLayout {
                 spacing: 1
-                Text { text: backend.userProfile.name;  font.pixelSize: 11; font.bold: true; color: "#FFFFFF" }
-                Text { text: backend.userProfile.plan || "Learner"; font.pixelSize: 9;  color: "#8FA3B8" }
+                Text {
+                    text: backend.userProfile.name || "User"
+                    font.pixelSize: 12
+                    font.bold: true
+                    color: "#FFFFFF"
+                    font.family: "Segoe UI"
+                    elide: Text.ElideRight
+                    Layout.maximumWidth: 110
+                }
+                Text {
+                    text: backend.userProfile.plan || "Learner"
+                    font.pixelSize: 9
+                    color: "#6B7C94"
+                    font.family: "Segoe UI"
+                }
             }
 
             Item { Layout.fillWidth: true }
+
+            Rectangle {
+                width: 26; height: 26; radius: 13
+                color: "#1F2F40"
+                Text {
+                    anchors.centerIn: parent
+                    text: "⚙"
+                    font.pixelSize: 11
+                    color: "#6B7C94"
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.pageSelected(8)
+                }
+            }
         }
     }
 }

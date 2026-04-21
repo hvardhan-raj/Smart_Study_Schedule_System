@@ -12,8 +12,11 @@ __pycache__/
 .mypy_cache/
 .coverage
 htmlcov/
+build/
+dist/
+release/
+*.prof
 .idea/
 .DS_Store
 Thumbs.db
 .env
-

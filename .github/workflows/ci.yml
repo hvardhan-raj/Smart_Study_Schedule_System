@@ -6,7 +6,11 @@ on:
 
 jobs:
   lint-and-test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -26,3 +30,8 @@ jobs:
 
       - name: Run tests
         run: pytest
+
+      - name: QML smoke test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m scripts.profile_startup --smoke-only

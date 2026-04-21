@@ -62,6 +62,21 @@ def load_state(store_path: Path, today: date) -> dict[str, Any]:
         "user": default_user(),
         "settings": default_settings(),
         "alert_settings": default_alert_settings(),
+        "reminder_preferences": {
+            "enabled": True,
+            "notification_time": "08:00",
+            "minimum_due_for_alert": 1,
+            "desktop_notifications": False,
+        },
+        "assistant_messages": [],
+        "sync_settings": {
+            "enabled": False,
+            "supabase_url": "",
+            "supabase_anon_key": "",
+            "device_id": "",
+            "last_sync_at": "",
+        },
+        "sync_history": [],
         "suggestion_dismissed": False,
         "study_minutes": default_study_minutes(),
         "topics": default_topics(),
@@ -75,6 +90,10 @@ def load_state(store_path: Path, today: date) -> dict[str, Any]:
             state["user"].update(payload.get("user", {}))
             state["settings"] = merge_nested(state["settings"], payload.get("settings", {}))
             state["alert_settings"].update(payload.get("alert_settings", {}))
+            state["reminder_preferences"].update(payload.get("reminder_preferences", {}))
+            state["assistant_messages"] = payload.get("assistant_messages", state["assistant_messages"])
+            state["sync_settings"].update(payload.get("sync_settings", {}))
+            state["sync_history"] = payload.get("sync_history", state["sync_history"])
             state["suggestion_dismissed"] = payload.get("suggestion_dismissed", False)
             state["study_minutes"] = payload.get("study_minutes", state["study_minutes"])
             state["topics"] = payload.get("topics", state["topics"])
@@ -93,6 +112,10 @@ def save_state(store_path: Path, state: dict[str, Any]) -> None:
         "user": state["user"],
         "settings": state["settings"],
         "alert_settings": state["alert_settings"],
+        "reminder_preferences": state["reminder_preferences"],
+        "assistant_messages": state["assistant_messages"],
+        "sync_settings": state["sync_settings"],
+        "sync_history": state["sync_history"],
         "suggestion_dismissed": state["suggestion_dismissed"],
         "study_minutes": state["study_minutes"],
         "topics": state["topics"],

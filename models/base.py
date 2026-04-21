@@ -158,7 +158,7 @@ class UserProfile(SyncMixin, Base):
     )
 
 
-class UserPreference(TimestampMixin, Base):
+class UserPreference(SyncMixin, Base):
     __tablename__ = "user_preferences"
     __table_args__ = (
         CheckConstraint("font_size_px BETWEEN 10 AND 24", name="ck_font_size"),
@@ -363,7 +363,7 @@ class Revision(SyncMixin, Base):
     )
 
 
-class PerformanceLog(TimestampMixin, Base):
+class PerformanceLog(SyncMixin, Base):
     __tablename__ = "performance_logs"
     __table_args__ = (
         Index("ix_perf_log_topic_id", "topic_id"),
@@ -387,7 +387,7 @@ class PerformanceLog(TimestampMixin, Base):
     revision: Mapped["Revision"] = relationship(back_populates="performance_logs")
 
 
-class NlpFeedback(TimestampMixin, Base):
+class NlpFeedback(SyncMixin, Base):
     __tablename__ = "nlp_feedback"
     __table_args__ = (
         Index("ix_nlp_feedback_user_id", "user_id"),
@@ -405,7 +405,7 @@ class NlpFeedback(TimestampMixin, Base):
     user: Mapped["UserProfile"] = relationship(back_populates="nlp_feedback_items")
 
 
-class UserBadge(TimestampMixin, Base):
+class UserBadge(SyncMixin, Base):
     __tablename__ = "user_badges"
     __table_args__ = (
         UniqueConstraint("user_id", "badge_slug", name="uq_user_badge"),
@@ -425,7 +425,7 @@ class UserBadge(TimestampMixin, Base):
     user: Mapped["UserProfile"] = relationship(back_populates="badges")
 
 
-class NotificationLog(TimestampMixin, Base):
+class NotificationLog(SyncMixin, Base):
     __tablename__ = "notification_logs"
     __table_args__ = (
         Index("ix_notif_log_user_id", "user_id"),

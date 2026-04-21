@@ -4,25 +4,19 @@ import QtQuick.Layouts 1.15
 
 ApplicationWindow {
     id: root
-    width:  1280
+    width: 1280
     height: 800
     visible: true
-    title:  "StudyFlow – Smart Study Schedule"
-    color: "#F4F6FA"
+    title: "StudyFlow – Smart Study Schedule"
+    color: "#F0F4F9"
     minimumWidth: 1080
     minimumHeight: 720
 
-    Shortcut {
-        sequence: "Ctrl+Tab"
-        onActivated: navigation.goToNextPage()
-    }
+    Shortcut { sequence: "Ctrl+Tab";       onActivated: navigation.goToNextPage() }
+    Shortcut { sequence: "Ctrl+Shift+Tab"; onActivated: navigation.goToPreviousPage() }
+    Shortcut { sequence: "F1";             onActivated: navigation.navigateToRoute("assistant") }
 
-    Shortcut {
-        sequence: "Ctrl+Shift+Tab"
-        onActivated: navigation.goToPreviousPage()
-    }
-
-    // Shell: sidebar (fixed left) + content (fills rest)
+    // Shell: sidebar (fixed left) + content area
     RowLayout {
         anchors.fill: parent
         spacing: 0
@@ -30,7 +24,7 @@ ApplicationWindow {
         Sidebar {
             id: sidebar
             Layout.fillHeight: true
-            Layout.preferredWidth: width
+            Layout.preferredWidth: 220
             pages: navigation.pages
             activePage: navigation.currentIndex
             onPageSelected: function(idx) { navigation.navigateToIndex(idx) }
@@ -49,7 +43,8 @@ ApplicationWindow {
             CalendarScreen           {}   // 4
             LearningIntelligenceScreen {}  // 5
             NotificationsScreen      {}   // 6
-            SettingsScreen           {}   // 7
+            AIAssistantScreen        {}   // 7
+            SettingsScreen           {}   // 8
         }
     }
 }

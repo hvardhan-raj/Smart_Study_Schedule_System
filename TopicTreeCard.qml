@@ -132,13 +132,16 @@ Item {
 
         Repeater {
             model: nodeData.children || []
-            delegate: TopicTreeCard {
+            delegate: Loader {
                 Layout.fillWidth: true
-                nodeData: modelData
-                accentColor: root.accentColor
-                depth: root.depth + 1
-                onRequestEdit: function(topicId) { root.requestEdit(topicId) }
-                onRequestAddChild: function(topicId, subjectName) { root.requestAddChild(topicId, subjectName) }
+                source: "TopicTreeCard.qml"
+                onLoaded: {
+                    item.nodeData = modelData
+                    item.accentColor = root.accentColor
+                    item.depth = root.depth + 1
+                    item.requestEdit.connect(function(topicId) { root.requestEdit(topicId) })
+                    item.requestAddChild.connect(function(topicId, subjectName) { root.requestAddChild(topicId, subjectName) })
+                }
             }
         }
     }

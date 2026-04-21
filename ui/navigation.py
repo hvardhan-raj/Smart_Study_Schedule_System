@@ -12,6 +12,7 @@ DEFAULT_PAGES: list[dict[str, str]] = [
     {"route": "calendar", "label": "Calendar", "icon": "▦"},
     {"route": "intelligence", "label": "Learning Intelligence", "icon": "↗"},
     {"route": "notifications", "label": "Notifications", "icon": "🔔"},
+    {"route": "assistant", "label": "AI Assistant", "icon": "AI"},
     {"route": "settings", "label": "Settings", "icon": "⚙"},
 ]
 
