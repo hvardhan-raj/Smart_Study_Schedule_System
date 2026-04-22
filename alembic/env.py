@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
-
 from alembic import context
 from config.settings import settings
+from db.session import create_sqlite_engine
 from models import Base
 
 config = context.config
@@ -32,10 +31,8 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
+    connectable = create_sqlite_engine(
+        config.get_main_option("sqlalchemy.url"),
     )
 
     with connectable.connect() as connection:
@@ -43,6 +40,7 @@ def run_migrations_online() -> None:
 
         with context.begin_transaction():
             context.run_migrations()
+    connectable.dispose()
 
 
 if context.is_offline_mode():
