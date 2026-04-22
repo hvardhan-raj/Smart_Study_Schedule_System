@@ -18,8 +18,8 @@ def test_dashboard_columns_split_tasks_by_schedule(tmp_path) -> None:
 
 def test_complete_revision_updates_task_and_topic_state(tmp_path) -> None:
     backend = StudyFlowBackend(tmp_path / "dashboard_state.json")
-    target_task = next(task for task in backend._tasks if task["topic"] == "Photosynthesis")
-    target_topic = next(topic for topic in backend._topics if topic["name"] == "Photosynthesis")
+    target_task = next(task for task in backend._tasks if not backend._is_task_completed(task))
+    target_topic = next(topic for topic in backend._topics if topic["name"] == target_task["topic"])
     original_progress = target_topic["progress"]
 
     backend.completeRevision(target_task["id"], 4)

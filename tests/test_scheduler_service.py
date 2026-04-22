@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from db.repositories import TopicRepository, create_user
-from models import ConfidenceRating, PerformanceLog, Revision
+from models import ConfidenceRating, DifficultyLevel, PerformanceLog, Revision
 from services.scheduler import SchedulerService
 
 
@@ -97,8 +97,16 @@ def test_confidence_feedback_changes_future_interval(session) -> None:
     user = create_user(session)
     topic_repo = TopicRepository(session)
     subject = topic_repo.create_subject(user.id, "History")
-    hard_topic = topic_repo.create_topic(subject_id=subject.id, name="Roman Empire")
-    easy_topic = topic_repo.create_topic(subject_id=subject.id, name="Renaissance")
+    hard_topic = topic_repo.create_topic(
+        subject_id=subject.id,
+        name="Roman Empire",
+        difficulty=DifficultyLevel.HARD,
+    )
+    easy_topic = topic_repo.create_topic(
+        subject_id=subject.id,
+        name="Renaissance",
+        difficulty=DifficultyLevel.EASY,
+    )
 
     scheduler = _build_scheduler(session, date(2026, 4, 20))
     hard_revision = scheduler.schedule_new_topic(hard_topic.id)

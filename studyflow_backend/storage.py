@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from copy import deepcopy
 from datetime import date, datetime
 from pathlib import Path
@@ -118,4 +119,7 @@ def save_state(store_path: Path, state: dict[str, Any]) -> None:
         "tasks": serialize_tasks(state["tasks"]),
         "notifications": serialize_notifications(state["notifications"]),
     }
-    store_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    store_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = store_path.with_name(f"{store_path.name}.{os.getpid()}.tmp")
+    temp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    temp_path.replace(store_path)

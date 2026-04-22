@@ -7,6 +7,7 @@ from pathlib import Path
 from threading import Event, Thread
 from typing import Any
 
+from PySide6.QtCore import QObject, Signal
 
 @dataclass(frozen=True)
 class ReminderPreferences:
@@ -30,16 +31,21 @@ class DesktopNotifier:
         return True
 
 
-class ReminderScheduler:
+class ReminderScheduler(QObject):
+    jobRequested = Signal()
+
     def __init__(
         self,
-        job: Callable[[], None],
+        job: Callable[[], None] | None = None,
         preferences: ReminderPreferences | None = None,
     ) -> None:
+        super().__init__()
         self.job = job
         self.preferences = preferences or ReminderPreferences()
         self._stop_event = Event()
         self._thread: Thread | None = None
+        if job is not None:
+            self.jobRequested.connect(job)
 
     def start(self) -> None:
         if not self.preferences.enabled or self._thread is not None:
@@ -55,7 +61,7 @@ class ReminderScheduler:
 
     def run_once(self) -> None:
         if self.preferences.enabled:
-            self.job()
+            self.jobRequested.emit()
 
     def next_run_at(self, now: datetime | None = None) -> datetime:
         current = now or datetime.now()

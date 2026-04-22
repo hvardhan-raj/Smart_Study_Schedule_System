@@ -66,3 +66,12 @@ def test_reminder_scheduler_computes_next_daily_run() -> None:
 
     assert next_run == datetime(2026, 4, 15, 8, 0)
     assert next_run - datetime(2026, 4, 14, 9, 0) == timedelta(hours=23)
+
+
+def test_reminder_scheduler_run_once_emits_connected_job() -> None:
+    calls: list[str] = []
+    scheduler = ReminderScheduler(lambda: calls.append("ran"))
+
+    scheduler.run_once()
+
+    assert calls == ["ran"]

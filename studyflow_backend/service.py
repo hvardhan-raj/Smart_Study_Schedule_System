@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import logging
 from datetime import date, datetime, time, timedelta
 from io import StringIO
 from pathlib import Path
@@ -42,6 +43,8 @@ ALERT_SETTING_META = {
     "streak_reminders": ("Streak Reminders", "Nudge consistency when activity drops.", "#14B8A6"),
 }
 
+logger = logging.getLogger(__name__)
+
 
 
 
@@ -51,9 +54,10 @@ class StudyFlowBackend(QObject):
     def __init__(self, store_path: Path | None = None) -> None:
         super().__init__()
         self._store_path = store_path or Path(__file__).resolve().parent.parent / "studyflow_data.json"
-        self._today = date.today()
-        self._selected_date = self._today
-        self._calendar_view_date = self._today
+        self._today_provider = date.today
+        self._today_value = self._today_provider()
+        self._selected_date = self._today_value
+        self._calendar_view_date = self._today_value
         self._task_filter = "all"
         self._curriculum_filter = "All"
         self._curriculum_search = ""
@@ -61,7 +65,7 @@ class StudyFlowBackend(QObject):
         self._bootstrap_nlp_model()
 
         try:
-            state = load_state(self._store_path, self._today)
+            state = load_state(self._store_path, self._today_value)
             self._settings = state.get("settings", {"notifications": True, "reminders": True, "auto_schedule": True})
             self._alert_settings = self._normalize_alert_settings(state.get("alert_settings", {}))
             self._reminder_preferences = self._normalize_reminder_preferences(state.get("reminder_preferences", {}))
@@ -74,14 +78,14 @@ class StudyFlowBackend(QObject):
             self._sync_history = [self._normalize_sync_history(item) for item in state.get("sync_history", [])]
             self._suggestion_dismissed = state.get("suggestion_dismissed", False)
             self._study_minutes = state.get("study_minutes", [])
-            self._topics = [self._normalize_topic(topic) for topic in state.get("topics", [])]
+            self._topics = state.get("topics", [])
             self._tasks = state.get("tasks", [])
             self._notifications = [
                 self._normalize_notification(notification, index)
                 for index, notification in enumerate(state.get("notifications", build_default_notifications()))
             ]
         except Exception:
-            # Fallback defaults if loading fails
+            logger.exception("Failed to initialize persisted StudyFlow state from %s", self._store_path)
             self._settings = {"notifications": True, "reminders": True, "auto_schedule": True}
             self._alert_settings = self._normalize_alert_settings({})
             self._reminder_preferences = self._normalize_reminder_preferences({})
@@ -125,6 +129,27 @@ class StudyFlowBackend(QObject):
 
     def _emit(self) -> None:
         self.stateChanged.emit()
+
+    @property
+    def _today(self) -> date:
+        return self._current_today()
+
+    def _current_today(self) -> date:
+        current = self._today_provider()
+        previous = self._today_value
+        if current == previous:
+            return current
+
+        if self._selected_date == previous:
+            self._selected_date = current
+        elif self._selected_date == previous + timedelta(days=1):
+            self._selected_date = current + timedelta(days=1)
+
+        if self._calendar_view_date == previous:
+            self._calendar_view_date = current
+
+        self._today_value = current
+        return current
 
     def _subject_meta(self, subject: str) -> SubjectMeta:
         return SUBJECTS.get(subject, SubjectMeta("?", "#64748B"))
@@ -964,118 +989,6 @@ class StudyFlowBackend(QObject):
             self._curriculum_filter = value
             self._emit()
 
-    @Slot(str, str)
-    def addSubject(self, name: str, color: str) -> None:
-        clean_name = name.strip()
-        if not clean_name:
-            return
-        clean_color = color.strip() or "#3B82F6"
-        if clean_name not in SUBJECTS:
-            SUBJECTS[clean_name] = SubjectMeta(clean_name[:3].upper(), clean_color)
-        self._save()
-        self._emit()
-
-    @Slot(str, str, str, str, str, str)
-    def upsertTopic(
-        self,
-        topic_id: str,
-        name: str,
-        subject: str,
-        difficulty: str,
-        parent_id: str,
-        notes: str,
-    ) -> None:
-        clean_name = name.strip()
-        if not clean_name:
-            return
-        clean_subject = subject.strip() or "General"
-        clean_difficulty = difficulty if difficulty in {"Easy", "Medium", "Hard"} else "Medium"
-        clean_parent = parent_id.strip() or None
-
-        if topic_id:
-            existing = self._find_topic_by_id(topic_id)
-            if existing is not None:
-                existing["name"] = clean_name
-                existing["subject"] = clean_subject
-                existing["difficulty"] = clean_difficulty
-                existing["parent_topic_id"] = clean_parent
-                existing["notes"] = notes
-                self._save()
-                self._emit()
-                return
-
-        new_topic = self._normalize_topic(
-            {
-                "name": clean_name,
-                "subject": clean_subject,
-                "difficulty": clean_difficulty,
-                "parent_topic_id": clean_parent,
-                "notes": notes,
-                "progress": 0,
-                "confidence": 3,
-            }
-        )
-        self._topics.append(new_topic)
-        self._rebuild_missing_tasks()
-        self._save()
-        self._emit()
-        self._add_notification(
-            "Topic Added",
-            f'"{clean_name}" was added under {clean_subject}.',
-            "+",
-            self._subject_meta(clean_subject).color,
-        )
-
-    @Slot(str, str, bool)
-    def importTopics(self, text: str, subject: str, csv_mode: bool) -> None:
-        clean_subject = subject.strip() or "General"
-        lines: list[str] = []
-        if csv_mode:
-            reader = csv.reader(StringIO(text))
-            for row in reader:
-                if row:
-                    lines.append(row[0].strip())
-        else:
-            lines = [line.strip() for line in text.splitlines() if line.strip()]
-
-        added = 0
-        for topic_name in lines:
-            if not topic_name or self._find_topic(topic_name) is not None:
-                continue
-            self._topics.append(
-                self._normalize_topic(
-                    {
-                        "name": topic_name,
-                        "subject": clean_subject,
-                        "difficulty": "Medium",
-                        "progress": 0,
-                        "confidence": 3,
-                    }
-                )
-            )
-            added += 1
-
-        if added:
-            self._rebuild_missing_tasks()
-            self._save()
-            self._emit()
-            self._add_notification(
-                "Bulk Import",
-                f"{added} topic{'s' if added != 1 else ''} imported under {clean_subject}.",
-                "+",
-                self._subject_meta(clean_subject).color,
-            )
-
-    @Slot(str, result="QVariantMap")
-    def suggestTopicDifficulty(self, topic_name: str) -> dict[str, Any]:
-        prediction = self._nlp_service.predict_difficulty(topic_name)
-        if prediction.difficulty is None:
-            return {"difficulty": "", "confidence": 0.0}
-        return {
-            "difficulty": prediction.difficulty.value,
-            "confidence": round(prediction.confidence, 2),
-        }
-
     @Property("QVariantList", notify=stateChanged)
     def intelligenceStats(self) -> list[dict[str, Any]]:
         completed = len(self._completed_tasks())
@@ -1535,9 +1448,16 @@ class StudyFlowBackend(QObject):
         clean_name = name.strip()
         if not clean_name or clean_name in self._subjects_from_topics():
             return
-        SUBJECTS[clean_name] = SubjectMeta(clean_name[:1].upper(), color_tag or "#3B82F6")
+        clean_color = color_tag.strip() or "#3B82F6"
+        SUBJECTS[clean_name] = SubjectMeta(clean_name[:1].upper(), clean_color)
         self._save()
         self._emit()
+        self._add_notification(
+            "Subject Added",
+            f'"{clean_name}" is now available for topic planning.',
+            "+",
+            clean_color,
+        )
 
     @Slot(str, str, str, str, str, str)
     def upsertTopic(
@@ -1550,40 +1470,62 @@ class StudyFlowBackend(QObject):
         notes: str,
     ) -> None:
         clean_name = name.strip()
-        clean_subject = subject.strip()
+        clean_subject = subject.strip() or "General"
         if not clean_name or not clean_subject:
             return
+        clean_difficulty = difficulty if difficulty in {"Easy", "Medium", "Hard"} else "Medium"
+        clean_notes = notes.strip()
+        clean_parent = parent_topic_id.strip() or None
 
         topic = self._find_topic_by_id(topic_id) if topic_id else None
         if topic is None:
+            if any(existing["name"].casefold() == clean_name.casefold() and existing["subject"] == clean_subject for existing in self._topics):
+                return
             topic = self._normalize_topic(
                 {
                     "id": f"topic-{uuid4().hex[:8]}",
                     "name": clean_name,
                     "subject": clean_subject,
-                    "difficulty": difficulty or "Medium",
-                    "notes": notes.strip(),
-                    "parent_topic_id": parent_topic_id or None,
+                    "difficulty": clean_difficulty,
+                    "notes": clean_notes,
+                    "parent_topic_id": clean_parent,
                 }
             )
             self._topics.append(topic)
             self._tasks.append(self._build_task_for_topic(topic))
+            notification_title = "Topic Added"
+            notification_body = f'"{clean_name}" was added under {clean_subject}.'
         else:
             previous_name = topic["name"]
+            if any(
+                existing["id"] != topic["id"]
+                and existing["subject"] == clean_subject
+                and existing["name"].casefold() == clean_name.casefold()
+                for existing in self._topics
+            ):
+                return
             topic["name"] = clean_name
             topic["subject"] = clean_subject
-            topic["difficulty"] = difficulty or "Medium"
-            topic["notes"] = notes.strip()
-            topic["parent_topic_id"] = parent_topic_id or None
+            topic["difficulty"] = clean_difficulty
+            topic["notes"] = clean_notes
+            topic["parent_topic_id"] = clean_parent
             related_task = next((task for task in self._tasks if task["topic"] == previous_name), None)
             if related_task is not None:
                 related_task["topic"] = clean_name
                 related_task["subject"] = clean_subject
                 related_task["difficulty"] = topic["difficulty"]
                 related_task["duration_minutes"] = {"Easy": 15, "Medium": 25, "Hard": 35}[topic["difficulty"]]
+            notification_title = "Topic Updated"
+            notification_body = f'"{clean_name}" was updated in {clean_subject}.'
 
         self._save()
         self._emit()
+        self._add_notification(
+            notification_title,
+            notification_body,
+            "+",
+            self._subject_meta(clean_subject).color,
+        )
 
     @Slot(str)
     def deleteTopic(self, topic_id: str) -> None:
@@ -1635,7 +1577,7 @@ class StudyFlowBackend(QObject):
 
     @Slot(str, str, bool)
     def importTopics(self, raw_text: str, subject: str, csv_mode: bool) -> None:
-        clean_subject = subject.strip()
+        clean_subject = subject.strip() or "General"
         if not raw_text.strip() or not clean_subject:
             return
 
@@ -1648,7 +1590,15 @@ class StudyFlowBackend(QObject):
         else:
             entries = [line.strip() for line in raw_text.splitlines() if line.strip()]
 
+        existing_names = {
+            (topic["subject"], topic["name"].casefold())
+            for topic in self._topics
+        }
+        added = 0
         for entry in entries:
+            key = (clean_subject, entry.casefold())
+            if key in existing_names:
+                continue
             suggestion = self.suggestTopicDifficulty(entry)
             topic = self._normalize_topic(
                 {
@@ -1661,9 +1611,20 @@ class StudyFlowBackend(QObject):
             )
             self._topics.append(topic)
             self._tasks.append(self._build_task_for_topic(topic))
+            existing_names.add(key)
+            added += 1
+
+        if not added:
+            return
 
         self._save()
         self._emit()
+        self._add_notification(
+            "Bulk Import",
+            f"{added} topic{'s' if added != 1 else ''} imported under {clean_subject}.",
+            "+",
+            self._subject_meta(clean_subject).color,
+        )
 
     @Slot(str)
     def setTaskFilter(self, filter: str) -> None:
@@ -1673,16 +1634,6 @@ class StudyFlowBackend(QObject):
     @Slot(str)
     def setCurriculumFilter(self, filter: str) -> None:
         self._curriculum_filter = filter
-        self._emit()
-
-    @Slot(str)
-    def setCurriculumDifficulty(self, difficulty: str) -> None:
-        self._curriculum_filter = difficulty
-        self._emit()
-
-    @Slot(str)
-    def setCurriculumSearch(self, query: str) -> None:
-        self._curriculum_search = query.strip()
         self._emit()
 
     @Slot()

@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths
+from PySide6.QtCore import QStandardPaths, Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 
@@ -46,7 +46,8 @@ def main() -> int:
     store_path.parent.mkdir(parents=True, exist_ok=True)
     backend = StudyFlowBackend(store_path)
     navigation = NavigationController()
-    reminder_scheduler = ReminderScheduler(backend.runReminderCheck, backend._reminder_preferences_model())
+    reminder_scheduler = ReminderScheduler(preferences=backend._reminder_preferences_model())
+    reminder_scheduler.jobRequested.connect(backend.runReminderCheck, Qt.ConnectionType.QueuedConnection)
     reminder_scheduler.start()
     app.aboutToQuit.connect(reminder_scheduler.stop)
     engine.rootContext().setContextProperty("backend", backend)
