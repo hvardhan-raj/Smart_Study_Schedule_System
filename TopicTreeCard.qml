@@ -110,7 +110,7 @@ Item {
                         label: "+ Child"
                         variant: "secondary"
                         small: true
-                        onClicked: root.requestAddChild(nodeData.id, nodeData.subject)
+                        onClicked: root.requestAddChild(nodeData.id, nodeData.subjectId)
                     }
 
                     AppButton {

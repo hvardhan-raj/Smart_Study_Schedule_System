@@ -1,4 +1,6 @@
-from __future__ import annotations
+from .service_db import StudyFlowBackend
+
+"""
 
 import csv
 import logging
@@ -1931,3 +1933,4 @@ class StudyFlowBackend(QObject):
             "#8B5CF6",
         )
         return str(report_path)
+"""

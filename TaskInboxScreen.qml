@@ -72,6 +72,8 @@ Rectangle {
                         id: subjectBox
                         Layout.preferredWidth: 160
                         model: backend.curriculumSubjectOptions
+                        textRole: "name"
+                        valueRole: "id"
                     }
 
                     ComboBox {
@@ -100,7 +102,7 @@ Rectangle {
                         onClicked: {
                             backend.addTask(
                                 taskNameField.text,
-                                subjectBox.currentText,
+                                subjectBox.currentValue,
                                 difficultyBox.currentText,
                                 scheduleBox.currentValue
                             )

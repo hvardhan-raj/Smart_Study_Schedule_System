@@ -131,6 +131,7 @@ def upgrade() -> None:
         "study_sessions",
         sa.Column("id", sa.String(length=36), primary_key=True),
         sa.Column("user_id", sa.String(length=36), nullable=False),
+        sa.Column("topic_id", sa.String(length=36), nullable=True),
         sa.Column("started_at", sa.DateTime(), nullable=False),
         sa.Column("ended_at", sa.DateTime(), nullable=True),
         sa.Column("duration_seconds", sa.Integer(), nullable=True),
@@ -147,9 +148,11 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
         sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
         sa.CheckConstraint("ended_at IS NULL OR ended_at >= started_at", name="ck_session_time_order"),
+        sa.ForeignKeyConstraint(["topic_id"], ["topics.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["user_profiles.id"], ondelete="CASCADE"),
     )
     op.create_index("ix_study_sessions_user_id", "study_sessions", ["user_id"])
+    op.create_index("ix_study_sessions_topic_id", "study_sessions", ["topic_id"])
     op.create_index("ix_study_sessions_started_at", "study_sessions", ["started_at"])
 
     op.create_table(
@@ -166,6 +169,7 @@ def upgrade() -> None:
         sa.Column("completion_date", sa.Date(), nullable=True),
         sa.Column("is_completed", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("is_archived", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column("progress", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("fsrs_stability", sa.Float(), nullable=True),
         sa.Column("fsrs_difficulty", sa.Float(), nullable=True),
         sa.Column("fsrs_due_date", sa.Date(), nullable=True),
@@ -180,6 +184,7 @@ def upgrade() -> None:
         sa.CheckConstraint("difficulty_score BETWEEN 0.0 AND 1.0", name="ck_difficulty_score"),
         sa.ForeignKeyConstraint(["parent_topic_id"], ["topics.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["subject_id"], ["subjects.id"], ondelete="CASCADE"),
+        sa.UniqueConstraint("subject_id", "name", name="uq_topics_subject_name"),
     )
     op.create_index("ix_topics_subject_id", "topics", ["subject_id"])
     op.create_index("ix_topics_fsrs_due_date", "topics", ["fsrs_due_date"])
@@ -315,6 +320,7 @@ def downgrade() -> None:
     op.drop_table("topics")
 
     op.drop_index("ix_study_sessions_started_at", table_name="study_sessions")
+    op.drop_index("ix_study_sessions_topic_id", table_name="study_sessions")
     op.drop_index("ix_study_sessions_user_id", table_name="study_sessions")
     op.drop_table("study_sessions")
 
