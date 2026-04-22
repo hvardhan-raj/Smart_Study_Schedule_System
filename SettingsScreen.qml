@@ -1,4 +1,4 @@
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
@@ -29,7 +29,7 @@ Rectangle {
                 width: parent.width
                 spacing: 20
 
-                // ── Settings sections ──────────────────────────────────
+                // â”€â”€ Settings sections â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.leftMargin: 24; Layout.rightMargin: 24; Layout.topMargin: 22
@@ -60,7 +60,7 @@ Rectangle {
                     }
                 }
 
-                // ── Cloud Sync + History ───────────────────────────────
+                // â”€â”€ Cloud Sync + History â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.leftMargin: 24; Layout.rightMargin: 24; Layout.bottomMargin: 24
@@ -160,7 +160,7 @@ Rectangle {
                                         anchors { fill: parent; margins: 10 }
                                         spacing: 3
                                         Text {
-                                            text: modelData.status + "  ↑" + modelData.pushed + "  ↓" + modelData.pulled
+                                            text: modelData.status + "  â†‘" + modelData.pushed + "  â†“" + modelData.pulled
                                             font.pixelSize: 11; font.bold: true; font.family: "Segoe UI"; color: "#0F172A"
                                             Layout.fillWidth: true; elide: Text.ElideRight
                                         }
@@ -185,3 +185,4 @@ Rectangle {
         }
     }
 }
+

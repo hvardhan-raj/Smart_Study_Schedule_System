@@ -2,17 +2,17 @@
 
 import csv
 import logging
-from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
 from io import StringIO
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
-from db.session import SessionLocal, init_database
+from db.session import init_database, session_scope
 from llm import AssistantContext, LLMService
 from models import ConfidenceRating, DifficultyLevel, Revision, Subject, Topic, UserProfile
 from nlp import NLPService, load_training_examples, train_model
@@ -21,7 +21,6 @@ from services import (
     ReminderPreferences,
     SchedulerService,
     SubjectService,
-    SyncConfig,
     SyncService,
     TopicService,
     build_exam_warnings,
@@ -67,7 +66,6 @@ def seed_defaults(db: Session, user_id: str) -> None:
         for topic_name, difficulty, progress in topics:
             topic = topic_service.create_topic(subject_id=subject.id, name=topic_name, difficulty=difficulty)
             topic.progress = progress
-    db.commit()
 
 
 class StudyFlowBackend(QObject):
@@ -76,7 +74,6 @@ class StudyFlowBackend(QObject):
     def __init__(self, store_path: Path | None = None) -> None:
         super().__init__()
         init_database()
-        self._session_factory = SessionLocal
         self._store_path = store_path or Path(__file__).resolve().parent.parent / "studyflow_data.json"
         self._today_provider = date.today
         self._today_value = self._today_provider()
@@ -95,13 +92,8 @@ class StudyFlowBackend(QObject):
         self._refresh_reminder_notifications()
         self._sync_service = SyncService(self._sync_config())
 
-    @contextmanager
-    def _db(self) -> Iterator[Session]:
-        session = self._session_factory()
-        try:
-            yield session
-        finally:
-            session.close()
+    def _db(self):
+        return session_scope()
 
     def _ensure_database_ready(self) -> None:
         with self._db() as db:
@@ -111,7 +103,6 @@ class StudyFlowBackend(QObject):
                 db.add(user)
                 db.flush()
             seed_defaults(db, user.id)
-            db.commit()
 
     def _load_json_state(self) -> None:
         try:
@@ -221,9 +212,7 @@ class StudyFlowBackend(QObject):
     def _normalize_sync_settings(self, settings: dict[str, Any]) -> dict[str, Any]:
         payload = {
             "enabled": False,
-            "supabase_url": "",
-            "supabase_anon_key": "",
-            "device_id": "desktop-local",
+            "device_id": "desktop-offline",
             "last_sync_at": "",
         }
         if isinstance(settings, dict):
@@ -477,14 +466,8 @@ class StudyFlowBackend(QObject):
             "children": children,
         }
 
-    def _sync_config(self) -> SyncConfig:
-        return SyncConfig(
-            enabled=bool(self._sync_settings["enabled"]),
-            supabase_url=str(self._sync_settings["supabase_url"]),
-            supabase_anon_key=str(self._sync_settings["supabase_anon_key"]),
-            device_id=str(self._sync_settings["device_id"]),
-            last_sync_at=str(self._sync_settings.get("last_sync_at", "")),
-        )
+    def _sync_config(self):
+        return {"enabled": False, "device_id": str(self._sync_settings.get("device_id", "desktop-offline"))}
 
     def _sync_state(self) -> dict[str, Any]:
         return {
@@ -497,8 +480,7 @@ class StudyFlowBackend(QObject):
         }
 
     def _mark_all_local_records_pending(self) -> None:
-        for item in self._notifications:
-            self._sync_service.mark_pending(item)
+        logger.info("Sync is disabled for the offline desktop app; no records were marked pending.")
 
     def _upsert_notification(self, notification_id: str, title: str, body: str, icon: str, color: str, *, read: bool = False) -> None:
         existing = next((item for item in self._notifications if item["id"] == notification_id), None)
@@ -829,12 +811,16 @@ class StudyFlowBackend(QObject):
 
     @Property("QVariantMap", notify=stateChanged)
     def syncStatus(self) -> dict[str, Any]:
-        self._sync_service = SyncService(self._sync_config())
         return self._sync_service.status(self._sync_state())
 
     @Property("QVariantMap", notify=stateChanged)
     def syncSettings(self) -> dict[str, Any]:
-        return {"enabled": bool(self._sync_settings.get("enabled", False)), "supabaseUrl": self._sync_settings.get("supabase_url", ""), "anonKeyConfigured": bool(self._sync_settings.get("supabase_anon_key", "")), "deviceId": self._sync_settings["device_id"], "lastSyncAt": self._sync_settings.get("last_sync_at") or "Never"}
+        return {
+            "enabled": False,
+            "deviceId": self._sync_settings.get("device_id", "desktop-offline"),
+            "lastSyncAt": self._sync_settings.get("last_sync_at") or "Never",
+            "message": "Sync is not implemented for this offline desktop app.",
+        }
 
     @Property("QVariantList", notify=stateChanged)
     def syncHistory(self) -> list[dict[str, Any]]:
@@ -843,9 +829,9 @@ class StudyFlowBackend(QObject):
     @Property("QVariantList", notify=stateChanged)
     def settingsColumns(self) -> list[dict[str, Any]]:
         return [
-            {"title": "Notifications", "rows": [{"label": "Push Alerts", "key": "notifications", "kind": "toggle", "toggleOn": bool(self._settings["notifications"]["enabled"])}, {"label": "Reminders", "key": "reminders", "kind": "toggle", "toggleOn": bool(self._settings["reminders"])}, {"label": "Auto Schedule", "key": "auto_schedule", "kind": "toggle", "toggleOn": bool(self._settings["auto_schedule"])}]},
-            {"title": "Cloud Sync", "rows": [{"label": "Cloud Sync", "key": "cloud_sync", "kind": "toggle", "toggleOn": bool(self._sync_settings["enabled"])}]},
+            {"title": "Notifications", "rows": [{"label": "Push Alerts", "key": "notifications", "kind": "toggle", "toggleOn": bool(self._settings.get("notifications", {}).get("enabled", True))}, {"label": "Reminders", "key": "reminders", "kind": "toggle", "toggleOn": bool(self._settings.get("reminders", True))}, {"label": "Auto Schedule", "key": "auto_schedule", "kind": "toggle", "toggleOn": bool(self._settings.get("auto_schedule", True))}]},
         ]
+
     @Slot(str, str)
     def addSubject(self, name: str, color: str) -> None:
         clean_name = name.strip()
@@ -854,21 +840,18 @@ class StudyFlowBackend(QObject):
         with self._db() as db:
             user = db.scalar(select(UserProfile))
             SubjectService(db).create_subject(user_id=user.id, name=clean_name, color_tag=color.strip() or "#3B82F6")
-            db.commit()
         self._emit()
 
     @Slot(str, str)
     def renameSubject(self, subject_id: str, name: str) -> None:
         with self._db() as db:
             SubjectService(db).update_subject(subject_id, name=name.strip())
-            db.commit()
         self._emit()
 
     @Slot(str)
     def deleteSubject(self, subject_id: str) -> None:
         with self._db() as db:
             SubjectService(db).delete_subject(subject_id)
-            db.commit()
         self._emit()
 
     @Slot(str, str, str)
@@ -876,21 +859,18 @@ class StudyFlowBackend(QObject):
         level = DifficultyLevel((difficulty or "Medium").lower())
         with self._db() as db:
             TopicService(db, scheduler=SchedulerService(db)).create_topic(subject_id=subject_id, name=name.strip(), difficulty=level)
-            db.commit()
         self._emit()
 
     @Slot(str)
     def deleteTopic(self, topic_id: str) -> None:
         with self._db() as db:
             TopicService(db, scheduler=SchedulerService(db)).delete_topic(topic_id)
-            db.commit()
         self._emit()
 
     @Slot(str, int)
     def updateTopicProgress(self, topic_id: str, progress: int) -> None:
         with self._db() as db:
             TopicService(db, scheduler=SchedulerService(db)).update_topic(topic_id, progress=progress)
-            db.commit()
         self._emit()
 
     @Slot(result="QVariantList")
@@ -914,7 +894,6 @@ class StudyFlowBackend(QObject):
             topic = db.get(Topic, topic_id)
             if topic is not None:
                 topic.progress = max(0, min(100, (topic.progress or 0) + RATING_TO_PROGRESS[safe_rating]))
-            db.commit()
         self._study_minutes.append(25)
         self._study_minutes = self._study_minutes[-14:]
         self._save()
@@ -928,7 +907,6 @@ class StudyFlowBackend(QObject):
                 return
             SchedulerService(db).record_revision(revision.id, rating=ConfidenceRating.GOOD, completed_at=datetime.now())
             revision.topic.progress = max(0, min(100, (revision.topic.progress or 0) + RATING_TO_PROGRESS[3]))
-            db.commit()
         self._study_minutes.append(25)
         self._study_minutes = self._study_minutes[-14:]
         self._save()
@@ -943,7 +921,6 @@ class StudyFlowBackend(QObject):
             safe_rating = max(1, min(int(rating), 4))
             SchedulerService(db).record_revision(revision.id, rating=ConfidenceRating(str(safe_rating)), completed_at=datetime.now())
             revision.topic.progress = max(0, min(100, (revision.topic.progress or 0) + RATING_TO_PROGRESS[safe_rating]))
-            db.commit()
         self._study_minutes.append(25)
         self._study_minutes = self._study_minutes[-14:]
         self._save()
@@ -955,9 +932,8 @@ class StudyFlowBackend(QObject):
         with self._db() as db:
             service = TopicService(db, scheduler=SchedulerService(db))
             topic = service.create_topic(subject_id=subject_id, name=topic_name.strip(), difficulty=DifficultyLevel((difficulty or "Medium").lower()), auto_schedule=False)
-            offset = {"overdue": -1, "today": 0, "tomorrow": 1, "this_week": 3}.get(schedule_key, 0)
+            offset = {"overdue": 0, "today": 0, "tomorrow": 1, "this_week": 3}.get(schedule_key, 0)
             SchedulerService(db).schedule_new_topic(topic.id, scheduled_for=self._today + timedelta(days=offset))
-            db.commit()
         self._emit()
 
     @Slot(str)
@@ -966,9 +942,9 @@ class StudyFlowBackend(QObject):
             revision = db.get(Revision, task_id)
             if revision is None or revision.is_completed:
                 return
+            revision.is_missed = True
             revision.scheduled_date = revision.scheduled_date + timedelta(days=1)
             revision.topic.fsrs_due_date = revision.scheduled_date
-            db.commit()
         self._emit()
 
     @Slot()
@@ -990,14 +966,12 @@ class StudyFlowBackend(QObject):
                 service.update_topic(topic_id, name=name.strip(), difficulty=level, parent_topic_id=parent_topic_id.strip() or None, notes=notes.strip())
             else:
                 service.create_topic(subject_id=subject_id, name=name.strip(), difficulty=level, parent_topic_id=parent_topic_id.strip() or None, notes=notes.strip())
-            db.commit()
         self._emit()
 
     @Slot(str)
     def markTopicComplete(self, topic_id: str) -> None:
         with self._db() as db:
             TopicService(db, scheduler=SchedulerService(db)).update_topic(topic_id, is_completed=True, completion_date=self._today, progress=100)
-            db.commit()
         self._emit()
 
     @Slot(str, result="QVariantMap")
@@ -1019,8 +993,12 @@ class StudyFlowBackend(QObject):
             for entry in entries:
                 suggestion = self.suggestTopicDifficulty(entry)
                 difficulty = DifficultyLevel((suggestion["difficulty"] or "Medium").lower())
-                service.create_topic(subject_id=subject_id, name=entry, difficulty=difficulty)
-            db.commit()
+                try:
+                    with db.begin_nested():
+                        service.create_topic(subject_id=subject_id, name=entry, difficulty=difficulty)
+                        db.flush()
+                except IntegrityError:
+                    logger.warning("Skipping duplicate or invalid imported topic", extra={"topic": entry, "subject_id": subject_id})
         self._emit()
     @Slot(str)
     def setTaskFilter(self, filter: str) -> None:
@@ -1175,9 +1153,6 @@ class StudyFlowBackend(QObject):
             self._settings["notifications"]["enabled"] = not bool(self._settings["notifications"]["enabled"])
         elif key in {"reminders", "auto_schedule"}:
             self._settings[key] = not bool(self._settings[key])
-        elif key == "cloud_sync":
-            self.toggleCloudSync()
-            return
         self._save()
         self._emit()
 
@@ -1194,24 +1169,17 @@ class StudyFlowBackend(QObject):
 
     @Slot()
     def toggleCloudSync(self) -> None:
-        self._sync_settings["enabled"] = not bool(self._sync_settings["enabled"])
-        self._save()
-        self._emit()
+        logger.info("Sync toggle ignored because sync is not implemented in offline mode.")
 
     @Slot(str, str)
     def updateSyncSetting(self, key: str, value: str) -> None:
-        if key not in {"supabase_url", "supabase_anon_key"}:
-            return
-        self._sync_settings[key] = value.strip()
-        self._save()
-        self._emit()
+        logger.info("Ignored sync setting update in offline mode", extra={"key": key, "value": value})
 
     @Slot(result="QVariantMap")
     def forceFullSync(self) -> dict[str, Any]:
-        self._sync_service = SyncService(self._sync_config())
         self._mark_all_local_records_pending()
         result = self._sync_service.sync(self._sync_state())
-        history_item = self._normalize_sync_history({"status": result.status, "message": result.message, "pushed": result.pushed, "pulled": result.pulled, "conflicts": result.conflicts, "created_at": datetime.now().isoformat()})
+        history_item = self._normalize_sync_history({"status": result.status, "message": result.message, "pushed": 0, "pulled": 0, "conflicts": 0, "created_at": datetime.now().isoformat()})
         self._sync_history.insert(0, history_item)
         self._sync_history = self._sync_history[:20]
         self._save()
