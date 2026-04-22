@@ -249,11 +249,13 @@ class StudySession(SyncMixin, Base):
     __table_args__ = (
         CheckConstraint("ended_at IS NULL OR ended_at >= started_at", name="ck_session_time_order"),
         Index("ix_study_sessions_user_id", "user_id"),
+        Index("ix_study_sessions_topic_id", "topic_id"),
         Index("ix_study_sessions_started_at", "started_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
     user_id: Mapped[str] = mapped_column(ForeignKey("user_profiles.id", ondelete="CASCADE"), nullable=False)
+    topic_id: Mapped[str] = mapped_column(ForeignKey("topics.id", ondelete="CASCADE"), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     ended_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     duration_seconds: Mapped[int] = mapped_column(Integer, nullable=True)
@@ -266,6 +268,7 @@ class StudySession(SyncMixin, Base):
     notes: Mapped[str] = mapped_column(Text, nullable=True)
 
     user: Mapped["UserProfile"] = relationship(back_populates="study_sessions")
+    topic: Mapped["Topic"] = relationship(back_populates="study_sessions")
     revisions: Mapped[list["Revision"]] = relationship(back_populates="study_session")
 
 
@@ -273,6 +276,7 @@ class Topic(SyncMixin, Base):
     __tablename__ = "topics"
     __table_args__ = (
         CheckConstraint("difficulty_score BETWEEN 0.0 AND 1.0", name="ck_difficulty_score"),
+        UniqueConstraint("subject_id", "name", name="uq_topics_subject_name"),
         Index("ix_topics_subject_id", "subject_id"),
         Index("ix_topics_fsrs_due_date", "fsrs_due_date"),
         Index("ix_topics_parent_topic_id", "parent_topic_id"),
@@ -303,6 +307,7 @@ class Topic(SyncMixin, Base):
     completion_date: Mapped[date] = mapped_column(Date, nullable=True)
     is_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     fsrs_stability: Mapped[float] = mapped_column(Float, nullable=True)
     fsrs_difficulty: Mapped[float] = mapped_column(Float, nullable=True)
     fsrs_due_date: Mapped[date] = mapped_column(Date, nullable=True)
@@ -317,6 +322,7 @@ class Topic(SyncMixin, Base):
     )
     child_topics: Mapped[list["Topic"]] = relationship(back_populates="parent_topic")
     revisions: Mapped[list["Revision"]] = relationship(back_populates="topic", cascade="all, delete-orphan")
+    study_sessions: Mapped[list["StudySession"]] = relationship(back_populates="topic", cascade="all, delete-orphan")
     performance_logs: Mapped[list["PerformanceLog"]] = relationship(
         back_populates="topic",
         cascade="all, delete-orphan",

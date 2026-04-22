@@ -5,7 +5,7 @@ from datetime import date, datetime, time
 from math import ceil, exp, log
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from models import ConfidenceRating, PerformanceLog, Revision, Topic
 from services.forgetting_curve import ForgettingCurveModel
@@ -205,6 +205,18 @@ class SchedulerService:
         self.forgetting_curve_model.train_if_needed(user_id)
         return next_revision
 
+    def review(
+        self,
+        topic_id: str,
+        rating: ConfidenceRating,
+        *,
+        completed_at: datetime | None = None,
+    ) -> Revision:
+        revision = self._active_revision_for_topic(topic_id)
+        if revision is None:
+            raise ValueError(f"Topic {topic_id} has no active revision to review")
+        return self.record_revision(revision.id, rating=rating, completed_at=completed_at)
+
     def reschedule_after_miss(
         self,
         revision_id: str,
@@ -376,6 +388,7 @@ class SchedulerService:
     def _active_revision_for_topic(self, topic_id: str) -> Revision | None:
         stmt = (
             select(Revision)
+            .options(joinedload(Revision.topic).joinedload(Topic.subject))
             .where(Revision.topic_id == topic_id, Revision.is_completed.is_(False))
             .order_by(Revision.scheduled_date)
         )

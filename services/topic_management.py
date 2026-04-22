@@ -140,6 +140,7 @@ class TopicService:
         *,
         name: str | None = None,
         difficulty: DifficultyLevel | None = None,
+        progress: int | None = None,
         parent_topic_id: str | None = None,
         exam_date: date | None = None,
         completion_date: date | None = None,
@@ -158,6 +159,8 @@ class TopicService:
         if difficulty is not None:
             topic.difficulty = difficulty
             topic.difficulty_score = self._default_difficulty_score(difficulty)
+        if progress is not None:
+            topic.progress = max(0, min(int(progress), 100))
         if parent_topic_id is not None:
             topic.parent_topic_id = parent_topic_id
         if exam_date is not None:

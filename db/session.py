@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from pathlib import Path
 
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session, sessionmaker
 
+from alembic import command
+from alembic.config import Config
 from config.settings import settings
 
 
@@ -37,4 +40,18 @@ def get_session(factory: sessionmaker[Session] | None = None) -> Generator[Sessi
         yield session
     finally:
         session.close()
+
+
+engine = create_sqlite_engine(
+    f"sqlite:///{settings.database_path.as_posix()}",
+)
+SessionLocal = create_session_factory(engine)
+
+
+def init_database() -> None:
+    settings.database_path.parent.mkdir(parents=True, exist_ok=True)
+    alembic_ini = Path(__file__).resolve().parent.parent / "alembic.ini"
+    config = Config(str(alembic_ini))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{settings.database_path.as_posix()}")
+    command.upgrade(config, "head")
 

@@ -20,7 +20,15 @@ Rectangle {
         editingParentId = parentId || ""
         var topic = findTopicById(topicId)
         topicNameField.text = topic ? topic.name : ""
-        topicSubjectBox.currentIndex = Math.max(0, backend.curriculumSubjectOptions.indexOf(topic ? topic.subject : (subjectName || backend.curriculumSubjectOptions[0] || "")))
+        var desiredSubjectId = topic ? topic.subjectId : (subjectName || (backend.curriculumSubjectOptions.length > 0 ? backend.curriculumSubjectOptions[0].id : ""))
+        var targetIndex = 0
+        for (var i = 0; i < backend.curriculumSubjectOptions.length; ++i) {
+            if (backend.curriculumSubjectOptions[i].id === desiredSubjectId) {
+                targetIndex = i
+                break
+            }
+        }
+        topicSubjectBox.currentIndex = targetIndex
         topicDifficultyBox.currentIndex = ["Easy", "Medium", "Hard"].indexOf(topic ? topic.difficulty : "Medium")
         topicNotesField.text = topic ? (topic.notes || "") : ""
         suggestionBadge.text = ""
@@ -191,7 +199,7 @@ Rectangle {
                                     label: "+ Topic"
                                     variant: "secondary"
                                     small: true
-                                    onClicked: root.openTopicDialog("", "", subjectData.subjectName)
+                                    onClicked: root.openTopicDialog("", "", subjectData.subjectId)
                                 }
                             }
 
@@ -262,7 +270,7 @@ Rectangle {
         onAccepted: backend.upsertTopic(
             editingTopicId,
             topicNameField.text,
-            topicSubjectBox.currentText,
+            topicSubjectBox.currentValue,
             topicDifficultyBox.currentText,
             editingParentId,
             topicNotesField.text
@@ -291,6 +299,8 @@ Rectangle {
                 id: topicSubjectBox
                 Layout.fillWidth: true
                 model: backend.curriculumSubjectOptions
+                textRole: "name"
+                valueRole: "id"
             }
 
             ComboBox {
@@ -323,7 +333,7 @@ Rectangle {
         width: 480
         title: "Bulk Import Topics"
         standardButtons: Dialog.Ok | Dialog.Cancel
-        onAccepted: backend.importTopics(importText.text, importSubjectBox.currentText, csvModeCheck.checked)
+        onAccepted: backend.importTopics(importText.text, importSubjectBox.currentValue, csvModeCheck.checked)
 
         ColumnLayout {
             anchors.fill: parent
@@ -333,6 +343,8 @@ Rectangle {
                 id: importSubjectBox
                 Layout.fillWidth: true
                 model: backend.curriculumSubjectOptions
+                textRole: "name"
+                valueRole: "id"
             }
 
             CheckBox {

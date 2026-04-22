@@ -3,18 +3,10 @@ from __future__ import annotations
 import json
 import os
 from copy import deepcopy
-from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from .defaults import (
-    build_default_notifications,
-    build_default_tasks,
-    default_alert_settings,
-    default_settings,
-    default_study_minutes,
-    default_topics,
-)
+from .defaults import build_default_notifications, default_alert_settings, default_settings, default_study_minutes
 
 
 def merge_nested(base: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:
@@ -27,37 +19,7 @@ def merge_nested(base: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]
     return merged
 
 
-def serialize_tasks(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    payload = []
-    for task in tasks:
-        item = dict(task)
-        item["scheduled_at"] = item["scheduled_at"].isoformat()
-        item["completed_at"] = item["completed_at"].isoformat() if item["completed_at"] else None
-        payload.append(item)
-    return payload
-
-
-def deserialize_tasks(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    payload = []
-    for task in tasks:
-        item = dict(task)
-        if isinstance(item["scheduled_at"], str):
-            item["scheduled_at"] = datetime.fromisoformat(item["scheduled_at"])
-        if item.get("completed_at") and isinstance(item["completed_at"], str):
-            item["completed_at"] = datetime.fromisoformat(item["completed_at"])
-        payload.append(item)
-    return payload
-
-
-def serialize_notifications(notifications: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [dict(notification) for notification in notifications]
-
-
-def deserialize_notifications(notifications: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [dict(notification) for notification in notifications]
-
-
-def load_state(store_path: Path, today: date) -> dict[str, Any]:
+def load_state(store_path: Path) -> dict[str, Any]:
     state = {
         "settings": default_settings(),
         "alert_settings": default_alert_settings(),
@@ -78,30 +40,32 @@ def load_state(store_path: Path, today: date) -> dict[str, Any]:
         "sync_history": [],
         "suggestion_dismissed": False,
         "study_minutes": default_study_minutes(),
-        "topics": default_topics(),
-        "tasks": build_default_tasks(today),
         "notifications": build_default_notifications(),
     }
+    if not store_path.exists():
+        return state
 
-    if store_path.exists():
-        try:
-            payload = json.loads(store_path.read_text(encoding="utf-8"))
-            state["settings"] = merge_nested(state["settings"], payload.get("settings", {}))
-            state["alert_settings"].update(payload.get("alert_settings", {}))
-            state["reminder_preferences"].update(payload.get("reminder_preferences", {}))
-            state["assistant_messages"] = payload.get("assistant_messages", state["assistant_messages"])
-            state["sync_settings"].update(payload.get("sync_settings", {}))
-            state["sync_history"] = payload.get("sync_history", state["sync_history"])
-            state["suggestion_dismissed"] = payload.get("suggestion_dismissed", False)
-            state["study_minutes"] = payload.get("study_minutes", state["study_minutes"])
-            state["topics"] = payload.get("topics", state["topics"])
-            state["tasks"] = payload.get("tasks", serialize_tasks(build_default_tasks(today)))
-            state["notifications"] = payload.get("notifications", serialize_notifications(build_default_notifications()))
-        except (json.JSONDecodeError, OSError):
-            pass
+    payload = json.loads(store_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        return state
 
-    state["tasks"] = deserialize_tasks(state["tasks"])
-    state["notifications"] = deserialize_notifications(state["notifications"])
+    if isinstance(payload.get("settings"), dict):
+        state["settings"] = merge_nested(state["settings"], payload["settings"])
+    if isinstance(payload.get("alert_settings"), dict):
+        state["alert_settings"].update(payload["alert_settings"])
+    if isinstance(payload.get("reminder_preferences"), dict):
+        state["reminder_preferences"].update(payload["reminder_preferences"])
+    if isinstance(payload.get("assistant_messages"), list):
+        state["assistant_messages"] = payload["assistant_messages"]
+    if isinstance(payload.get("sync_settings"), dict):
+        state["sync_settings"].update(payload["sync_settings"])
+    if isinstance(payload.get("sync_history"), list):
+        state["sync_history"] = payload["sync_history"]
+    state["suggestion_dismissed"] = bool(payload.get("suggestion_dismissed", False))
+    if isinstance(payload.get("study_minutes"), list):
+        state["study_minutes"] = payload["study_minutes"]
+    if isinstance(payload.get("notifications"), list):
+        state["notifications"] = [dict(notification) for notification in payload["notifications"] if isinstance(notification, dict)]
     return state
 
 
@@ -115,9 +79,7 @@ def save_state(store_path: Path, state: dict[str, Any]) -> None:
         "sync_history": state["sync_history"],
         "suggestion_dismissed": state["suggestion_dismissed"],
         "study_minutes": state["study_minutes"],
-        "topics": state["topics"],
-        "tasks": serialize_tasks(state["tasks"]),
-        "notifications": serialize_notifications(state["notifications"]),
+        "notifications": state["notifications"],
     }
     store_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = store_path.with_name(f"{store_path.name}.{os.getpid()}.tmp")
